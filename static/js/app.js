@@ -95,17 +95,6 @@ function initializeSalesAI() {
     if (typeof initSalesAI === 'function') {
         initSalesAI();
     }
-    
-    // Add welcome message if chat is empty
-    const chatMessages = document.getElementById('chatMessages');
-    if (chatMessages && chatMessages.children.length === 0) {
-        appendMessage({
-            role: 'assistant',
-            content: {
-                answer_summary: "您好！我是您的 AI 銷售助理。我可以回答關於各種筆記型電腦的問題，並為您進行比較。"
-            }
-        });
-    }
 }
 
 // Initialize Add Specifications view

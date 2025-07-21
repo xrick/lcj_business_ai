@@ -1,7 +1,9 @@
 // sales_rag_app/static/js/ai-chat.js (最終修復版)
 
-// Initialize Sales AI functionality
+let salesAIInitialized = false;
 function initSalesAI() {
+    if (salesAIInitialized) return;
+    salesAIInitialized = true;
     console.log('Initializing Sales AI...');
     
     // DOM 元素獲取
@@ -310,20 +312,6 @@ function initSalesAI() {
         if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
     });
     sendButton.addEventListener("click", sendMessage);
-    document.querySelector('.preset-buttons').addEventListener('click', (e) => {
-        if (e.target.classList.contains('preset-btn')) {
-            userInput.value = e.target.dataset.question;
-            sendMessage();
-        }
-    });
-
-    // Event listeners
-    userInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-    });
-    sendButton.addEventListener("click", sendMessage);
-    
-    // Preset questions
     const presetButtons = document.querySelector('.preset-buttons');
     if (presetButtons) {
         presetButtons.addEventListener('click', (e) => {
