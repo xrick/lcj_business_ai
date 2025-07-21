@@ -1,3 +1,13 @@
+# ⚠️ 執行環境說明
+
+**請務必於 conda 虛擬環境 `salseragenv` 下執行本專案，所有依賴（如 prettytable、langchain_community 等）也需安裝於此環境。**
+
+啟動方式：
+
+```bash
+conda activate salseragenv
+```
+
 # SalesRAG 整合系統使用文件
 
 ## 系統簡介
@@ -7,16 +17,19 @@ SalesRAG 整合系統提供了統一的界面，結合銷售助手 AI 功能和�
 ## 安裝說明
 
 ### 系統需求
+
 - Python 3.8+
 - pip package manager
 - 建議使用 Linux 或 macOS 系統
 
 ### 步驟 1: 進入專案目錄
+
 ```bash
 cd /home/mapleleaf/LCJRepos/projects/SalesRAG/salesrag
 ```
 
 ### 步驟 2: 安裝相依套件
+
 ```bash
 # 安裝所有必要的 Python 套件
 pip install -r requirements.txt
@@ -27,6 +40,7 @@ pip install -r requirements.txt
 ```
 
 ### 步驟 3: 檢查安裝
+
 ```bash
 # 檢查 Python 版本
 python --version
@@ -40,6 +54,7 @@ python -c "import fastapi, uvicorn, duckdb, pymilvus, pandas; print('All package
 ### 啟動服務
 
 #### 方法 1: 直接啟動（開發模式）
+
 ```bash
 # 進入 salesrag 目錄
 cd /home/mapleleaf/LCJRepos/projects/SalesRAG/salesrag
@@ -49,6 +64,7 @@ python main.py
 ```
 
 #### 方法 2: 使用 Uvicorn（生產模式）
+
 ```bash
 # 進入 salesrag 目錄
 cd /home/mapleleaf/LCJRepos/projects/SalesRAG/salesrag
@@ -58,6 +74,7 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 #### 方法 3: 背景執行
+
 ```bash
 # 使用 nohup 在背景執行
 nohup python main.py > salesrag.log 2>&1 &
@@ -69,12 +86,14 @@ ps aux | grep python | grep main.py
 ### 停止服務
 
 #### 方法 1: 前台服務停止
+
 ```bash
 # 如果服務在前台執行，使用 Ctrl+C 停止
 Ctrl + C
 ```
 
 #### 方法 2: 背景服務停止
+
 ```bash
 # 查找服務程序 ID
 ps aux | grep "python main.py" | grep -v grep
@@ -87,6 +106,7 @@ kill -9 <PID>
 ```
 
 #### 方法 3: 使用 pkill
+
 ```bash
 # 停止所有相關的 Python 程序
 pkill -f "python main.py"
@@ -98,6 +118,7 @@ pkill -f "salesrag"
 ### 檢查服務狀態
 
 #### 檢查服務是否運行
+
 ```bash
 # 檢查埠口是否被使用
 netstat -tulpn | grep :8001
@@ -109,6 +130,7 @@ ps aux | grep "python main.py" | grep -v grep
 ```
 
 #### 檢查服務健康狀態
+
 ```bash
 # 使用 curl 測試健康端點
 curl http://localhost:8001/health
@@ -120,6 +142,7 @@ wget -qO- http://localhost:8001/health
 ## 使用說明
 
 ### 1. 啟動服務後訪問
+
 ```bash
 # 啟動服務
 python main.py
@@ -129,12 +152,14 @@ http://localhost:8001
 ```
 
 ### 2. 使用 Sales-AI 功能
+
 1. 點擊左側邊欄的 **Sales-AI** 按鈕
 2. 在聊天界面輸入問題
 3. 查看 AI 回應和規格比較表格
 4. 使用預設問題快速開始
 
 ### 3. 使用 Add Specifications 功能
+
 1. 點擊左側邊欄的 **Add Specifications** 按鈕
 2. 上傳 `.xlsx`, `.xls`, 或 `.csv` 格式的規格檔案
 3. 預覽資料內容
@@ -142,6 +167,7 @@ http://localhost:8001
 5. 查看處理結果
 
 ### 4. 查看資料歷史
+
 - 左側邊欄的 **已匯入檔案列表** 顯示所有成功處理的資料
 - 包含時間戳記、檔案名稱、處理狀態
 - 點擊項目查看詳細資訊
@@ -149,6 +175,7 @@ http://localhost:8001
 ## 常用命令
 
 ### 開發相關
+
 ```bash
 # 開發模式啟動（自動重載）
 uvicorn main:app --reload --host 0.0.0.0 --port 8001
@@ -161,6 +188,7 @@ tail -f salesrag.log
 ```
 
 ### 資料庫相關
+
 ```bash
 # 檢查資料庫檔案
 ls -la db/
@@ -173,6 +201,7 @@ python -c "import sqlite3; conn = sqlite3.connect('db/history.db'); print(conn.e
 ```
 
 ### 系統監控
+
 ```bash
 # 監控系統資源使用
 top -p $(pgrep -f "python main.py")
@@ -189,6 +218,7 @@ netstat -an | grep :8001
 ### 常見問題
 
 #### 1. 無法啟動服務
+
 ```bash
 # 檢查埠口是否被占用
 lsof -i :8001
@@ -198,6 +228,7 @@ python main.py --port 8002
 ```
 
 #### 2. 套件安裝失敗
+
 ```bash
 # 升級 pip
 pip install --upgrade pip
@@ -208,6 +239,7 @@ pip install -r requirements.txt --no-cache-dir
 ```
 
 #### 3. 資料庫連接問題
+
 ```bash
 # 檢查資料庫檔案權限
 ls -la db/
@@ -219,6 +251,7 @@ python main.py  # 會自動重新建立
 ```
 
 #### 4. 服務無回應
+
 ```bash
 # 查看錯誤日誌
 cat salesrag.log
@@ -231,17 +264,21 @@ python main.py
 ## 設定檔案
 
 ### config.py
+
 主要設定檔案，包含：
+
 - 資料庫路徑
 - 應用程式設定
 - 服務設定
 
 ### requirements.txt
+
 包含所有必要的 Python 套件依賴
 
 ## API 端點
 
 ### 主要端點
+
 - `GET /` - 主頁面
 - `GET /health` - 健康檢查
 - `POST /api/sales/chat-stream` - 聊天串流
@@ -249,6 +286,7 @@ python main.py
 - `GET /api/history/` - 歷史記錄
 
 ### 測試 API
+
 ```bash
 # 測試健康端點
 curl http://localhost:8001/health
@@ -263,12 +301,14 @@ curl http://localhost:8001/api/history/
 ## 維護建議
 
 ### 日常維護
+
 1. 定期檢查日誌檔案
 2. 監控系統資源使用
 3. 備份重要資料庫檔案
 4. 更新相依套件
 
 ### 備份
+
 ```bash
 # 備份資料庫
 cp db/sales_specs.db backup/
@@ -279,6 +319,7 @@ cp config.py backup/
 ```
 
 ### 更新
+
 ```bash
 # 更新套件
 pip install --upgrade -r requirements.txt
@@ -290,6 +331,7 @@ pip list --outdated
 ## 支援
 
 如有問題或需要協助，請：
+
 1. 查看日誌檔案 `salesrag.log`
 2. 檢查系統資源使用狀況
 3. 確認網路連接正常
