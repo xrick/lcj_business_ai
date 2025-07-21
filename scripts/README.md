@@ -1,10 +1,12 @@
-# SalesRAG 腳本說明
+# 
+    SalesRAG 腳本說明
 
 本目錄包含 SalesRAG 整合系統的管理腳本。
 
 ## 腳本列表
 
 ### 1. install.sh - 安裝腳本
+
 自動化安裝 SalesRAG 系統和所有依賴。
 
 ```bash
@@ -19,6 +21,7 @@
 ```
 
 **功能：**
+
 - 檢查系統環境和依賴
 - 安裝 Python 套件
 - 建立必要目錄
@@ -27,6 +30,7 @@
 - 建立快速啟動腳本
 
 ### 2. start_service.sh - 啟動服務腳本
+
 啟動 SalesRAG 服務的腳本。
 
 ```bash
@@ -38,6 +42,7 @@
 ```
 
 **功能：**
+
 - 檢查 Python 環境和依賴
 - 檢查埠口可用性
 - 建立必要目錄
@@ -45,6 +50,7 @@
 - 健康狀態檢查
 
 ### 3. stop_service.sh - 停止服務腳本
+
 停止 SalesRAG 服務的腳本。
 
 ```bash
@@ -62,6 +68,7 @@
 ```
 
 **功能：**
+
 - 優雅停止服務
 - 強制停止服務
 - 查看服務狀態
@@ -125,17 +132,20 @@
 ### 常見問題
 
 1. **腳本沒有執行權限**
+
 ```bash
 chmod +x scripts/*.sh
 ```
 
 2. **Python 版本過低**
+
 ```bash
 # 升級 Python 或使用虛擬環境
 python --version
 ```
 
 3. **依賴安裝失敗**
+
 ```bash
 # 清除快取重新安裝
 pip cache purge
@@ -143,6 +153,7 @@ pip install -r requirements.txt --no-cache-dir
 ```
 
 4. **埠口被占用**
+
 ```bash
 # 查看占用情況
 lsof -i :8001
@@ -151,6 +162,7 @@ kill -9 <PID>
 ```
 
 5. **服務無法啟動**
+
 ```bash
 # 查看日誌
 cat salesrag.log
@@ -175,6 +187,7 @@ python -c "import fastapi, uvicorn"
 ## 版本資訊
 
 這些腳本適用於：
+
 - SalesRAG 整合系統 v1.0
 - Python 3.8+
 - Linux/macOS 系統
