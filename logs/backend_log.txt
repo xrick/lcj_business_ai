@@ -336,4 +336,4 @@ Before outputting your JSON response, you MUST:
 6. Only proceed with the JSON output if all validations pass
 
 [YOUR JSON RESPONSE - OUTPUT ONLY THE JSON OBJECT WITH answer_summary AND comparison_table]
-========================================
+========================================`
