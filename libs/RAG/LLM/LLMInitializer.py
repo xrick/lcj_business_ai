@@ -1,7 +1,7 @@
 from langchain_community.llms import Ollama
 
 class LLMInitializer:
-    def __init__(self, model_name: str = "deepseek-r1:latest", temperature: float = 0.1):
+    def __init__(self, model_name: str = "deepseek-r1:7b", temperature: float = 0.1):
         """
         初始化 LLM。
         :param model_name: 在 Ollama 中運行的模型名稱。
