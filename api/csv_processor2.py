@@ -4,7 +4,7 @@ from typing import List, Dict, Optional
 from pathlib import Path
 import logging
 import re
-
+import pandas as pd
 import sys
 import os
 from pathlib import Path
@@ -18,6 +18,7 @@ class CSVProcessor2:
     
     def __init__(self):
         self.parser = CSVParser2()
+    
     
     def process_csv_content(self, csv_content: str, custom_rules: Optional[Dict] = None) -> List[Dict[str, str]]:
         """

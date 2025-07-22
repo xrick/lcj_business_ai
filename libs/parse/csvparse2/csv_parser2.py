@@ -7,6 +7,7 @@ import csv
 # import argparse
 
 import logging
+import pandas as pd
 
 # 導入父類別
 import sys
@@ -45,7 +46,8 @@ class CSVParser2(ParseBase):
         try:
             # 設置輸入資料
             self.rawcsv = data
-            
+            #first check if the file is xlsx, if so, convert to csv
+            self.rawcsv = self.convert_xlsx_to_csv_if_needed(self.rawcsv)
             # 載入 CSV 並自動檢測格式
             self.datalist = self._load_csv(self.rawcsv)
             
@@ -118,7 +120,7 @@ class CSVParser2(ParseBase):
         
     
     def _load_rules(self):
-        with open(self._rules_file, "r", encoding="utf-8") as f:
+        with open(self._rules_file, "r", encoding="utf-8-sig") as f:
             return json.load(f)
         
 
@@ -314,6 +316,20 @@ class CSVParser2(ParseBase):
             for row in self.processed_result:
                 writer.writerow([row[i] for i in range(len(row))])
         print(f"✅ 已輸出至：{self.default_output_path}")
+
+    # 轉換 XLSX 為 CSV 檔案 cayman 20250722
+    def convert_xlsx_to_csv_if_needed(self, file_path):
+        if file_path.lower().endswith(".csv"):
+            return file_path
+        elif file_path.lower().endswith(".xlsx"):
+            print(f"🔁 偵測到 XLSX 檔案，正在轉換為 CSV：{file_path}")
+            df = pd.read_excel(file_path, sheet_name=0, header=None)
+            temp_csv_path = os.path.join(tempfile.gettempdir(), "_converted_temp.csv")
+            df.to_csv(temp_csv_path, index=False, header=False, encoding="utf-8-sig")
+            print(f"✅ 已轉換為暫存 CSV：{temp_csv_path}")
+            return temp_csv_path
+        else:
+            raise ValueError("❌ 僅支援 .csv 或 .xlsx 檔案！")
 
 # def main():
 #     parser = argparse.ArgumentParser(description="根據 JSON 規則搜尋 CSV 並轉為每機種一列格式（v4 + prefix 每列讀取）")
