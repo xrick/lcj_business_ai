@@ -1,0 +1,78 @@
+/home/mapleleaf/LCJRepos/projects/lcj_business_ai/libs/RAG/LLM/LLMInitializer.py:18: LangChainDeprecationWarning: The class `Ollama` was deprecated in LangChain 0.3.1 and will be removed in 1.0.0. An updated version of the class exists in the :class:`~langchain-ollama package and should be used instead. To use it run `pip install -U :class:`~langchain-ollama` and import as `from :class:`~langchain_ollama import OllamaLLM``.
+  self.llm = Ollama(
+/home/mapleleaf/LCJRepos/projects/lcj_business_ai/libs/RAG/DB/MilvusQuery.py:12: LangChainDeprecationWarning: The class `HuggingFaceEmbeddings` was deprecated in LangChain 0.2.2 and will be removed in 1.0. An updated version of the class exists in the :class:`~langchain-huggingface package and should be used instead. To use it run `pip install -U :class:`~langchain-huggingface` and import as `from :class:`~langchain_huggingface import HuggingFaceEmbeddings``.
+  self.embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+2025-07-22 15:22:12,193 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cpu
+2025-07-22 15:22:12,194 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-07-22 15:22:14,670 - root - INFO - 成功載入關鍵字配置: ['display', 'cpu', 'gpu', 'memory', 'storage', 'battery', 'portability', 'connectivity', 'comparison', 'specifications', 'latest', 'usage_scenario', 'budget']
+INFO:     Started server process [399737]
+INFO:     Waiting for application startup.
+2025-07-22 15:22:14,693 - api.history_routes - INFO - History database initialized successfully
+2025-07-22 15:22:14,693 - api.history_routes - INFO - History database initialized successfully
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+正在搜尋服務目錄: /home/mapleleaf/LCJRepos/projects/lcj_business_ai/libs/services
+成功初始化 Ollama 模型: deepseek-r1:7b
+成功連接到 Milvus at localhost:19530
+成功設定並載入 Collection: sales_notebook_specs
+成功連接到 DuckDB: sales_rag_app/db/sales_specs.db
+成功載入服務: sales_assistant
+INFO:     127.0.0.1:45278 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49552 - "GET /api/parser-info HTTP/1.1" 200 OK
+2025-07-22 15:24:57,911 - api.csv_processor2 - INFO - 開始使用 CSVProcessor2 strategy 解析檔案: /tmp/tmp9esz9de8.csv
+2025-07-22 15:24:57,911 - libs.parse.csvparse2.csv_parser2 - INFO - 檢測到結構化規格 CSV，使用規則驅動解析
+2025-07-22 15:24:57,911 - libs.parse.csvparse2.csv_parser2 - INFO - 解析前準備完成 - 標題: ['version', 'modelname', 'mainboard', 'devtime', 'pm', 'structconfig', 'lcd', 'touchpanel', 'iointerface', 'ledind', 'powerbutton', 'keyboard', 'webcamera', 'touchpad', 'fingerprint', 'audio', 'battery', 'cpu', 'gpu', 'memory', 'lcdconnector', 'storage', 'wifislot', 'thermal', 'tpm', 'rtc', 'wireless', 'lan', 'lte', 'bluetooth', 'softwareconfig', 'ai', 'accessory', 'certifications']
+2025-07-22 15:24:57,911 - libs.parse.csvparse2.csv_parser2 - ERROR - 解析後處理失敗: 0
+2025-07-22 15:24:57,911 - api.csv_processor2 - WARNING - CSV 解析後處理失敗，但繼續執行
+2025-07-22 15:24:57,911 - api.csv_processor2 - WARNING - processed_csv 尚未實作，回傳原始解析結果
+⚠️ 規則 1 - version: 找不到關鍵字 ['Stage', 'Version']，全欄填空白
+⚠️ 規則 2 - modelname: 找不到關鍵字 ['Model Name']，全欄填空白
+⚠️ 規則 3 - mainboard: 找不到關鍵字 ['MB Ver.']，全欄填空白
+⚠️ 規則 4 - devtime: 找不到關鍵字 ['Develop', 'stage']，全欄填空白
+⚠️ 規則 5 - pm: 找不到關鍵字 ['PM', 'Owner']，全欄填空白
+⚠️ 規則 6 - structconfig: 找不到關鍵字 ['Structure', 'Form']，全欄填空白
+⚠️ 規則 7 - lcd: 找不到關鍵字 ['LCD', 'Dimension']，全欄填空白
+⚠️ 規則 8 - touchpanel: 找不到關鍵字 ['Touch panel', 'Form']，全欄填空白
+⚠️ 規則 9 - iointerface: 找不到關鍵字 ['IO Interface', 'MB IO(Left)']，全欄填空白
+⚠️ 規則 10 - ledind: 找不到關鍵字 ['LED indicator', '1x Power On/Off/Sleep']，全欄填空白
+⚠️ 規則 11 - powerbutton: 找不到關鍵字 ['Power button', 'Button']，全欄填空白
+⚠️ 規則 12 - keyboard: 找不到關鍵字 ['Keyboard', 'Back light']，全欄填空白
+⚠️ 規則 13 - webcamera: 找不到關鍵字 ['Web camera', 'Front']，全欄填空白
+⚠️ 規則 14 - touchpad: 找不到關鍵字 ['Touchpad', 'Interface type']，全欄填空白
+⚠️ 規則 15 - fingerprint: 找不到關鍵字 ['Fingerprint', 'Location']，全欄填空白
+⚠️ 規則 16 - audio: 找不到關鍵字 ['Audio', 'Speaker']，全欄填空白
+⚠️ 規則 17 - battery: 找不到關鍵字 ['Battery', 'Type']，全欄填空白
+⚠️ 規則 18 - cpu: 找不到關鍵字 ['CPU', 'Module']，全欄填空白
+⚠️ 規則 19 - gpu: 找不到關鍵字 ['GPU', 'Model']，全欄填空白
+⚠️ 規則 20 - memory: 找不到關鍵字 ['Memory', 'RAM']，全欄填空白
+⚠️ 規則 21 - lcdconnector: 找不到關鍵字 ['LCD Connector', 'Port']，全欄填空白
+⚠️ 規則 22 - storage: 找不到關鍵字 ['Storage', 'SSD']，全欄填空白
+⚠️ 規則 23 - wifislot: 找不到關鍵字 ['Wifi', 'Wifi']，全欄填空白
+⚠️ 規則 24 - thermal: 找不到關鍵字 ['Thermal Solution', 'TDP']，全欄填空白
+⚠️ 規則 25 - tpm: 找不到關鍵字 ['TPM', 'interface Type']，全欄填空白
+⚠️ 規則 26 - rtc: 找不到關鍵字 ['RTC', 'RTC Connector']，全欄填空白
+⚠️ 規則 27 - wireless: 找不到關鍵字 ['WIFI', 'Wifi Chip Model']，全欄填空白
+⚠️ 規則 28 - lan: 找不到關鍵字 ['LAN', 'RJ45']，全欄填空白
+⚠️ 規則 29 - lte: 找不到關鍵字 ['LTE', 'M.2 slot']，全欄填空白
+⚠️ 規則 30 - bluetooth: 找不到關鍵字 ['Bluetooth', 'Bluetooth']，全欄填空白
+⚠️ 規則 31 - softwareconfig: 找不到關鍵字 ['Operating System', 'System']，全欄填空白
+⚠️ 規則 32 - ai: 找不到關鍵字 ['AI in Windows', '(need OEM get approval from Microsoft)']，全欄填空白
+⚠️ 規則 33 - accessory: 找不到關鍵字 ['Power adapter', 'Standard Configuration']，全欄填空白
+⚠️ 規則 34 - certifications: 找不到關鍵字 ['Certifications', 'Safety']，全欄填空白
+INFO:     127.0.0.1:53642 - "POST /api/process HTTP/1.1" 200 OK
+2025-07-22 15:25:31,652 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cpu
+2025-07-22 15:25:31,652 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+資料驗證：原始 1 筆，有效 1 筆，過濾掉 0 筆空記錄
+--- Ingesting to DuckDB ---
+Found existing DuckDB file 'db/sales_specs.db'. Appending data...
+Found existing 'specs' table. Appending data...
+Successfully appended 1 rows to DuckDB 'specs' table.
+--- Ingesting to Milvus ---
+Connecting to Milvus at localhost:19530...
+Found existing collection 'sales_notebook_specs'. Appending data...
+Generating embeddings for 15 vector fields...
+載入 SentenceTransformer 模型...
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 21.24it/s]
+Preparing data for insertion...
+Successfully appended 1 entities to Milvus collection 'sales_notebook_specs'.
+INFO:     127.0.0.1:48734 - "POST /api/ingest-to-db HTTP/1.1" 200 OK

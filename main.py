@@ -46,10 +46,11 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # Import API routes (will be created later)
 try:
-    from api import sales_routes, specs_routes, history_routes
+    from api import sales_routes, specs_routes, history_routes, import_data_routes
     app.include_router(sales_routes.router, prefix="/api/sales", tags=["sales"])
     app.include_router(specs_routes.router, prefix="/api/specs", tags=["specs"])
     app.include_router(history_routes.router, prefix="/api/history", tags=["history"])
+    app.include_router(import_data_routes.router, prefix="/api", tags=["import"])
 except ImportError as e:
     logging.warning(f"Some API routes not yet available: {e}")
 
@@ -57,6 +58,9 @@ except ImportError as e:
 async def main_interface(request: Request):
     """Main integrated interface"""
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+
 
 @app.get("/health")
 async def health_check():

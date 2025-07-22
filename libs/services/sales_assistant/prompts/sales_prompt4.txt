@@ -202,7 +202,6 @@ Before outputting your JSON response, you MUST:
 1. Verify that ALL model names in your comparison_table exist in the provided data's "modelname" field
 2. Verify that you have NOT mentioned any brands or model names that are not in the provided data
 3. Verify that you have NOT created any fictional specifications
-4. Verify that you have NOT mentioned any NVIDIA GPUs or non-AMD GPU brands
 5. If you cannot find the requested information, use "N/A" and explain the limitation in answer_summary
 6. Only proceed with the JSON output if all validations pass
 

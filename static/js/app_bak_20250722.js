@@ -149,77 +149,30 @@ async function processFile(file) {
     updateProgress(0, '準備處理檔案...');
     
     try {
-        updateProgress(25, '讀取檔案內容...');
+        // Create FormData for file upload
+        const formData = new FormData();
+        formData.append('file', file);
         
-        // Read file content as text
-        const fileContent = await readFileAsText(file);
+        updateProgress(25, '上傳檔案中...');
         
-        updateProgress(50, '解析 CSV 內容...');
-        
-        // Call MLINFO API for processing
-        const response = await fetch('/api/process', {
+        // Upload file to server
+        const response = await fetch('/api/specs/upload', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                text_content: fileContent,
-                custom_rules: null,
-                temp_regex: null,
-                file_name: file.name
-            })
+            body: formData
         });
         
+        updateProgress(50, '分析檔案內容...');
+        
         if (!response.ok) {
-            throw new Error(`處理失敗: ${response.status}`);
+            throw new Error(`上傳失敗: ${response.status}`);
         }
         
         const result = await response.json();
         
-        // Handle modeltype input requirement
-        if (result.require_modeltype_input) {
-            let userModeltype = prompt('無法自動判斷型號，請輸入 modeltype（如 960、928...）：\n或直接按確定使用檔名作為型號');
-            
-            // If user cancels or provides empty input, try to use filename as default
-            if (!userModeltype || !userModeltype.trim()) {
-                const fileName = file.name;
-                const baseFileName = fileName.replace(/\.(csv|CSV)$/i, '');
-                
-                if (baseFileName && baseFileName.length <= 15 && /^[A-Za-z0-9_-]+$/.test(baseFileName)) {
-                    userModeltype = baseFileName;
-                    console.log(`使用檔名作為預設 modeltype: ${userModeltype}`);
-                } else {
-                    userModeltype = 'unknown';
-                    console.log('使用預設 modeltype: unknown');
-                }
-            }
-            
-            // Retry with user input
-            const retryResponse = await fetch('/api/process', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    text_content: fileContent,
-                    custom_rules: null,
-                    temp_regex: null,
-                    file_name: file.name,
-                    user_modeltype: userModeltype.trim()
-                })
-            });
-            
-            if (!retryResponse.ok) {
-                throw new Error(`重新處理失敗: ${retryResponse.status}`);
-            }
-            
-            const retryResult = await retryResponse.json();
-            updateProgress(75, '準備預覽...');
-            showPreview(retryResult);
-        } else {
-            updateProgress(75, '準備預覽...');
-            showPreview(result);
-        }
+        updateProgress(75, '準備預覽...');
+        
+        // Show preview
+        showPreview(result);
         
         updateProgress(100, '處理完成！');
         
@@ -237,16 +190,6 @@ async function processFile(file) {
             hideProcessingSection();
         }, 3000);
     }
-}
-
-// Helper function to read file as text
-function readFileAsText(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = (e) => reject(new Error('檔案讀取失敗'));
-        reader.readAsText(file, 'UTF-8');
-    });
 }
 
 // Show preview of processed data
@@ -305,38 +248,38 @@ async function handleConfirmUpload() {
     const previewSection = document.getElementById('previewSection');
     const uploadData = JSON.parse(previewSection.dataset.uploadData || '{}');
     
-    if (!uploadData.data) {
+    if (!uploadData.filename) {
         alert('沒有可上傳的資料');
         return;
     }
     
     try {
         showProcessingSection();
-        updateProgress(0, '開始匯入資料庫...');
+        updateProgress(0, '開始處理資料...');
         
-        // Call MLINFO ingest API
-        const response = await fetch('/api/ingest-to-db', {
+        const response = await fetch('/api/specs/process', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                data: uploadData.data
+                filename: uploadData.filename,
+                data: uploadData.preview
             })
         });
         
-        updateProgress(50, '儲存至 DuckDB 和 Milvus...');
+        updateProgress(50, '儲存資料中...');
         
         if (!response.ok) {
-            throw new Error(`匯入失敗: ${response.status}`);
+            throw new Error(`處理失敗: ${response.status}`);
         }
         
         const result = await response.json();
         
-        updateProgress(100, '匯入完成！');
+        updateProgress(100, '處理完成！');
         
         // Show success message
-        alert(`資料匯入完成！\nDuckDB: ${result.duckdb_rows_added} 筆\nMilvus: ${result.milvus_entities_added} 筆`);
+        alert(`資料處理完成！\n成功: ${result.success} 筆\n錯誤: ${result.errors} 筆`);
         
         // Reset upload state
         resetUploadState();
@@ -346,7 +289,7 @@ async function handleConfirmUpload() {
         
     } catch (error) {
         console.error('Upload confirmation error:', error);
-        alert(`匯入失敗: ${error.message}`);
+        alert(`上傳失敗: ${error.message}`);
     } finally {
         hideProcessingSection();
     }
