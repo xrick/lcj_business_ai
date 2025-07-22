@@ -265,13 +265,6 @@ function showPreview(data) {
             <p><strong>總欄位數:</strong> ${data.stats.total_columns}</p>
         </div>
         
-        <div class="preview-columns">
-            <h4>欄位列表</h4>
-            <div class="columns-list">
-                ${data.stats.columns.map(col => `<span class="column-tag">${col}</span>`).join('')}
-            </div>
-        </div>
-        
         <div class="preview-data">
             <h4>資料預覽</h4>
             <div class="preview-table-container">
