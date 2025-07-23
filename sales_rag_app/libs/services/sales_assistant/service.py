@@ -58,7 +58,7 @@ class SalesAssistantService(BaseService):
         
         self.milvus_query = MilvusQuery(collection_name="sales_notebook_specs")
         self.duckdb_query = DuckDBQuery(db_file="sales_rag_app/db/sales_specs.db")
-        self.prompt_template = self._load_prompt_template("sales_rag_app/libs/services/sales_assistant/prompts/sales_prompt4.txt")
+        self.prompt_template = self._load_prompt_template("sales_rag_app/libs/services/sales_assistant/prompts/sales_prompt.txt")
         
         # 載入關鍵字配置
         self.intent_keywords = self._load_intent_keywords("sales_rag_app/libs/services/sales_assistant/prompts/query_keywords.json")
