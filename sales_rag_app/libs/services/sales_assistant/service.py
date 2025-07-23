@@ -7,6 +7,7 @@ from ...RAG.LLM.LLMInitializer import LLMInitializer
 from .entity_recognition import EntityRecognitionSystem
 from .clarification_manager import ClarificationManager
 from .parent_child_retriever import ParentChildRetriever
+from .multichat import MultichatManager, ChatTemplateManager
 import logging
 import re
 
@@ -68,6 +69,10 @@ class SalesAssistantService(BaseService):
         
         # 初始化澄清對話管理器
         self.clarification_manager = ClarificationManager()
+        
+        # 初始化多輪對話管理器
+        self.multichat_manager = MultichatManager()
+        self.chat_template_manager = ChatTemplateManager()
         
         # 初始化 Parent-Child 檢索系統 (替代三層意圖檢測)
         self.parent_child_retriever = ParentChildRetriever(
@@ -2395,6 +2400,29 @@ class SalesAssistantService(BaseService):
         try:
             logging.info(f"開始新的RAG流程，查詢: {query}")
             
+            # 步骤0.5：檢查是否應該啟動多輪對話導引
+            should_start_multichat = self.multichat_manager.should_activate_multichat(query)
+            if should_start_multichat:
+                logging.info("檢測到模糊查詢，啟動多輪對話導引系統")
+                try:
+                    session_id, first_question = self.multichat_manager.start_multichat_flow(query)
+                    formatted_question = self.chat_template_manager.format_session_start(
+                        query, 
+                        self.chat_template_manager.format_question(
+                            first_question, 
+                            first_question.step, 
+                            len(self.multichat_manager.active_sessions[session_id].chat_chain.features_order)
+                        )
+                    )
+                    
+                    # 以串流方式返回多輪對話開始訊息
+                    yield f"data: {json.dumps({'type': 'multichat_start', 'session_id': session_id, 'content': formatted_question}, ensure_ascii=False)}\n\n"
+                    return
+                    
+                except Exception as e:
+                    logging.error(f"啟動多輪對話失敗: {e}")
+                    # 如果多輪對話啟動失敗，繼續使用原有流程
+            
             # 步骤1：使用 Parent-Child 檢索系統 (替代原有的三層意圖檢測)
             logging.info("使用 Parent-Child 檢索系統處理查詢")
             query_intent = self.parent_child_retriever.process_query(query)
@@ -4418,4 +4446,279 @@ Parent-Child 回應指導：
                 "query_type": "model_type",
                 "confidence_score": 0.5,
                 "smart_clarification_enhanced": True
+            }
+
+    async def process_multichat_response(self, session_id: str, user_choice: str, user_input: str = ""):
+        """
+        處理多輪對話回應
+        
+        Args:
+            session_id: 會話ID
+            user_choice: 使用者選擇的選項編號或ID
+            user_input: 使用者額外輸入
+            
+        Returns:
+            處理結果
+        """
+        try:
+            logging.info(f"處理多輪對話回應: session_id={session_id}, choice={user_choice}")
+            
+            # 獲取會話狀態
+            session = self.multichat_manager.get_session_state(session_id)
+            if not session:
+                return {
+                    "message_type": "error",
+                    "content": self.chat_template_manager.format_error_message("session_timeout")
+                }
+            
+            # 獲取當前問題和選項
+            current_feature_id = session.chat_chain.features_order[session.current_step]
+            current_feature = self.multichat_manager.nb_features[current_feature_id]
+            
+            # 將數字選擇轉換為選項ID
+            actual_choice = user_choice
+            if user_choice.isdigit():
+                try:
+                    choice_index = int(user_choice) - 1
+                    if 0 <= choice_index < len(current_feature.options):
+                        actual_choice = current_feature.options[choice_index].option_id
+                    else:
+                        return {
+                            "message_type": "error",
+                            "content": self.chat_template_manager.format_error_message("invalid_choice").format(max_options=len(current_feature.options))
+                        }
+                except ValueError:
+                    return {
+                        "message_type": "error", 
+                        "content": self.chat_template_manager.format_error_message("invalid_choice").format(max_options=len(current_feature.options))
+                    }
+            
+            # 處理使用者回應
+            result = self.multichat_manager.process_feature_response(session_id, actual_choice, user_input)
+            
+            if result["action"] == "continue":
+                # 繼續下一個問題
+                next_question = result["next_question"]
+                
+                # 格式化回應
+                selected_option = None
+                for option in current_feature.options:
+                    if option.option_id == actual_choice:
+                        selected_option = option
+                        break
+                
+                formatted_response = self.chat_template_manager.format_next_question_response(
+                    selected_option.label if selected_option else actual_choice,
+                    self.chat_template_manager.format_question(
+                        next_question,
+                        result["current_step"],
+                        result["total_steps"]
+                    )
+                )
+                
+                return {
+                    "message_type": "multichat_continue",
+                    "session_id": session_id,
+                    "content": formatted_response,
+                    "progress": result["progress"]
+                }
+                
+            elif result["action"] == "complete":
+                # 多輪對話完成，執行查詢
+                preferences_summary = result["collected_preferences"]
+                db_filters = result["db_filters"]
+                enhanced_query = result["enhanced_query"]
+                
+                # 格式化完成訊息
+                completion_message = self.chat_template_manager.format_session_complete(preferences_summary)
+                
+                # 構建查詢意圖用於資料檢索
+                query_intent = self._build_query_intent_from_multichat(result)
+                
+                # 執行查詢並返回結果
+                query_result = await self._execute_multichat_query(query_intent, preferences_summary, enhanced_query)
+                
+                return {
+                    "message_type": "multichat_complete",
+                    "session_id": session_id,
+                    "completion_message": completion_message,
+                    "query_result": query_result
+                }
+            
+            else:
+                raise ValueError(f"未知的多輪對話動作: {result['action']}")
+                
+        except Exception as e:
+            logging.error(f"處理多輪對話回應時發生錯誤: {e}")
+            return {
+                "message_type": "error",
+                "content": self.chat_template_manager.format_error_message("general")
+            }
+
+    def _build_query_intent_from_multichat(self, multichat_result: dict) -> dict:
+        """
+        從多輪對話結果構建查詢意圖
+        
+        Args:
+            multichat_result: 多輪對話完成結果
+            
+        Returns:
+            查詢意圖字典
+        """
+        try:
+            preferences = multichat_result.get("collected_preferences", {})
+            db_filters = multichat_result.get("db_filters", {})
+            
+            # 基於收集的偏好構建查詢意圖
+            query_intent = {
+                "modelnames": [],
+                "modeltypes": ["819", "839", "958"],  # 預設所有系列
+                "intents": [],
+                "primary_intent": "multichat_guided",
+                "intent": "multichat_guided",
+                "query_type": "model_type",
+                "confidence_score": 0.95,
+                "multichat_enhanced": True,
+                "collected_preferences": preferences,
+                "db_filters": db_filters
+            }
+            
+            # 根據GPU偏好調整系列
+            if "gpu" in preferences:
+                gpu_pref = preferences["gpu"]["selected_option"]
+                if "遊戲級" in gpu_pref or "創作級" in gpu_pref:
+                    query_intent["modeltypes"] = ["958"]  # 高性能系列
+                elif "內建顯卡" in gpu_pref:
+                    query_intent["modeltypes"] = ["819", "839"]  # 節能系列
+            
+            # 根據價格偏好調整系列
+            if "price" in preferences:
+                price_pref = preferences["price"]["selected_option"]
+                if "經濟型" in price_pref:
+                    query_intent["modeltypes"] = ["839"]
+                elif "高階型" in price_pref or "旗艦型" in price_pref:
+                    query_intent["modeltypes"] = ["958"]
+                elif "中階型" in price_pref:
+                    query_intent["modeltypes"] = ["819", "839"]
+            
+            # 設定優先規格
+            priority_specs = []
+            for feature_id, pref_data in preferences.items():
+                if pref_data["selected_option"] not in ["沒有偏好", "沒有特殊需求", "彈性選擇"]:
+                    priority_specs.append(feature_id)
+            
+            query_intent["intents"] = priority_specs
+            
+            logging.info(f"從多輪對話構建查詢意圖: {query_intent}")
+            return query_intent
+            
+        except Exception as e:
+            logging.error(f"構建多輪對話查詢意圖失敗: {e}")
+            return {
+                "modelnames": [],
+                "modeltypes": ["839"],
+                "intents": [],
+                "primary_intent": "general",
+                "intent": "general", 
+                "query_type": "model_type",
+                "confidence_score": 0.5,
+                "multichat_enhanced": True
+            }
+
+    async def _execute_multichat_query(self, query_intent: dict, preferences_summary: dict, enhanced_query: str):
+        """
+        執行多輪對話引導的查詢
+        
+        Args:
+            query_intent: 查詢意圖
+            preferences_summary: 偏好總結
+            enhanced_query: 增強查詢字串
+            
+        Returns:
+            查詢結果
+        """
+        try:
+            # 獲取資料
+            context_list_of_dicts, target_modelnames = self._get_data_by_query_type(query_intent)
+            
+            # 構建包含偏好的上下文
+            multichat_context = {
+                "data": context_list_of_dicts,
+                "query_intent": query_intent,
+                "target_modelnames": target_modelnames,
+                "user_preferences": preferences_summary,
+                "guided_query": enhanced_query
+            }
+            
+            context_str = json.dumps(multichat_context, indent=2, ensure_ascii=False)
+            
+            # 構建專用的多輪對話提示
+            preferences_text = ""
+            for feature_id, pref_data in preferences_summary.items():
+                if pref_data["selected_option"] not in ["沒有偏好", "沒有特殊需求", "彈性選擇"]:
+                    preferences_text += f"- {pref_data['feature_name']}: {pref_data['selected_option']}\n"
+            
+            multichat_prompt = f"""
+根據用戶通過多輪對話明確表達的需求偏好：
+
+{preferences_text}
+
+請基於以下資訊提供精準的筆電推薦：
+- 所有偏好都已通過系統性問答收集
+- 推薦應嚴格符合用戶明確表達的偏好
+- 重點突出符合用戶偏好的機型特色
+- 如有多個符合條件的機型，請按匹配度排序
+
+{self.prompt_template}
+"""
+            
+            final_prompt = multichat_prompt.replace("{context}", context_str).replace("{query}", enhanced_query)
+            
+            # 調用LLM
+            response_str = self.llm_initializer.invoke(final_prompt)
+            
+            # 解析回應
+            think_end = response_str.find("</think>")
+            if think_end != -1:
+                cleaned_response_str = response_str[think_end + 8:].strip()
+            else:
+                cleaned_response_str = response_str
+            
+            json_start = cleaned_response_str.find("{")
+            json_end = cleaned_response_str.rfind("}")
+            
+            if json_start != -1 and json_end != -1 and json_end > json_start:
+                json_content = cleaned_response_str[json_start:json_end+1]
+                try:
+                    parsed_response = json.loads(json_content)
+                    
+                    # 加入多輪對話標記
+                    parsed_response["multichat_guided"] = True
+                    parsed_response["user_preferences"] = preferences_summary
+                    
+                    return parsed_response
+                    
+                except json.JSONDecodeError as e:
+                    logging.error(f"JSON解析失敗: {e}")
+                    return {
+                        "answer_summary": cleaned_response_str,
+                        "comparison_table": [],
+                        "multichat_guided": True,
+                        "user_preferences": preferences_summary
+                    }
+            else:
+                return {
+                    "answer_summary": cleaned_response_str,
+                    "comparison_table": [],
+                    "multichat_guided": True,
+                    "user_preferences": preferences_summary
+                }
+                
+        except Exception as e:
+            logging.error(f"執行多輪對話查詢失敗: {e}")
+            return {
+                "answer_summary": f"執行查詢時發生錯誤: {str(e)}",
+                "comparison_table": [],
+                "multichat_guided": True,
+                "user_preferences": preferences_summary
             }
