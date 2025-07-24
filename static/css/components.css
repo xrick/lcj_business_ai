@@ -1160,6 +1160,70 @@
     line-height: 1.6;
 }
 
+/* Markdown Table Styles for Recommendation Content */
+.recommendation-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.recommendation-content table thead {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.recommendation-content table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.recommendation-content table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+    color: #374151;
+}
+
+.recommendation-content table tbody tr:nth-child(even) {
+    background-color: #f8fafc;
+}
+
+.recommendation-content table tbody tr:hover {
+    background-color: #e0e7ff;
+    transition: background-color 0.2s ease;
+}
+
+.recommendation-content table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Responsive table design */
+@media (max-width: 768px) {
+    .recommendation-content table {
+        font-size: 12px;
+    }
+    
+    .recommendation-content table th,
+    .recommendation-content table td {
+        padding: 8px 12px;
+    }
+    
+    .recommendation-content table th {
+        font-size: 11px;
+    }
+}
+
 /* Responsive Design for All Questions Form */
 @media (max-width: 968px) {
     .question-row {

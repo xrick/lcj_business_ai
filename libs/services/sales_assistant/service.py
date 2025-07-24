@@ -2531,24 +2531,35 @@ AG958 - 成本效益佳，基本辦公需求充分滿足
                     if not analysis_summary and recommendations:
                         analysis_summary = "根據您的需求偏好，推薦以下筆電機型。"
                     
-                    # 使用PrettyTable生成markdown表格
+                    # 生成標準 Markdown 表格
                     if recommendations:
-                        table = PrettyTable()
-                        table.field_names = ["綜合分析推薦", "推薦機型", "推薦原因"]
-                        table.align = "l"  # 左對齊
+                        # 建立標準 Markdown 表格格式
+                        markdown_lines = []
+                        
+                        # 表格標題
+                        header = "| 綜合分析推薦 | 推薦機型 | 推薦原因 |"
+                        separator = "| --- | --- | --- |"
+                        markdown_lines.append(header)
+                        markdown_lines.append(separator)
                         
                         # 第一行包含分析總結
                         first_rec = recommendations[0]
-                        table.add_row([analysis_summary, first_rec["model_name"], first_rec["reason"]])
+                        # 清理內容，確保 Markdown 格式正確
+                        clean_analysis = analysis_summary.replace('\n', ' ').replace('|', '\\|')
+                        clean_model = first_rec['model_name'].replace('\n', ' ').replace('|', '\\|')
+                        clean_reason = first_rec['reason'].replace('\n', ' ').replace('|', '\\|')
+                        first_row = f"| {clean_analysis} | {clean_model} | {clean_reason} |"
+                        markdown_lines.append(first_row)
                         
                         # 其餘推薦機型
                         for rec in recommendations[1:]:
-                            table.add_row(["", rec["model_name"], rec["reason"]])
+                            clean_model = rec['model_name'].replace('\n', ' ').replace('|', '\\|')
+                            clean_reason = rec['reason'].replace('\n', ' ').replace('|', '\\|')
+                            row = f"|  | {clean_model} | {clean_reason} |"
+                            markdown_lines.append(row)
                         
-                        # 生成markdown格式
-                        markdown_table = table.get_html_string().replace('<table>', '\n').replace('</table>', '\n')
-                        # 簡化為markdown格式
-                        markdown_table = table.get_string()
+                        # 生成最終的 markdown 表格
+                        markdown_table = "\n".join(markdown_lines)
                         
                         logging.info("成功生成推薦表格")
                         

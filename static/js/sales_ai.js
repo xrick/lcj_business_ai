@@ -1,10 +1,225 @@
 // sales_rag_app/static/js/ai-chat.js (最終修復版)
 
 let salesAIInitialized = false;
+
+// Custom markdown table parser as fallback
+function parseMarkdownTable(markdownText) {
+    console.log('🔧 Using custom markdown table parser');
+    console.log('📄 Input markdown text:', JSON.stringify(markdownText));
+    
+    try {
+        const lines = markdownText.trim().split('\n');
+        console.log('📝 Split into lines:', lines.length, 'lines:', lines);
+        
+        if (lines.length < 3) {
+            console.log('❌ Not enough lines for a table (need at least 3)');
+            return markdownText; // Not a table, return as-is
+        }
+        
+        // Check if it looks like a table (contains | characters)
+        const hasFirstLinePipe = lines[0].includes('|');
+        const hasSecondLineSeparator = lines[1].includes('---');
+        console.log('🔍 Table format check - First line has |:', hasFirstLinePipe, 'Second line has ---:', hasSecondLineSeparator);
+        
+        if (!hasFirstLinePipe || !hasSecondLineSeparator) {
+            console.log('❌ Not a table format - missing required characters');
+            return markdownText; // Not a table format
+        }
+        
+        // Parse header
+        const headerCells = lines[0].split('|').map(cell => cell.trim()).filter(cell => cell);
+        console.log('📊 Header cells:', headerCells);
+        
+        // Skip separator line (lines[1])
+        console.log('⏭️ Skipping separator line:', lines[1]);
+        
+        // Parse data rows
+        const dataRows = [];
+        for (let i = 2; i < lines.length; i++) {
+            if (lines[i].includes('|')) {
+                const rowCells = lines[i].split('|').map(cell => cell.trim()).filter(cell => cell);
+                console.log(`📊 Row ${i-1} cells:`, rowCells);
+                dataRows.push(rowCells);
+            }
+        }
+        console.log('📋 Total data rows:', dataRows.length);
+        
+        // Generate HTML table
+        let html = '<table>\n<thead>\n<tr>\n';
+        headerCells.forEach((header, index) => {
+            // Remove markdown bold formatting (**text**)
+            const cleanHeader = header.replace(/\*\*(.*?)\*\*/g, '$1');
+            console.log(`📝 Processing header ${index}: "${header}" -> "${cleanHeader}"`);
+            html += `<th>${cleanHeader}</th>\n`;
+        });
+        html += '</tr>\n</thead>\n<tbody>\n';
+        
+        dataRows.forEach((row, rowIndex) => {
+            html += '<tr>\n';
+            row.forEach((cell, cellIndex) => {
+                // Remove markdown bold formatting and handle other basic formatting
+                const cleanCell = cell.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                console.log(`📝 Processing row ${rowIndex}, cell ${cellIndex}: "${cell}" -> "${cleanCell}"`);
+                html += `<td>${cleanCell}</td>\n`;
+            });
+            html += '</tr>\n';
+        });
+        
+        html += '</tbody>\n</table>';
+        
+        console.log('✅ Custom parser successfully converted table');
+        console.log('🔧 Generated HTML:', html);
+        return html;
+    } catch (error) {
+        console.error('❌ Custom markdown table parser failed:', error);
+        console.error('📄 Failed on input:', markdownText);
+        return markdownText; // Fallback to original text
+    }
+}
+
+// Test function for markdown table conversion
+function testMarkdownTableConversion() {
+    console.log('🧪 Testing markdown table conversion...');
+    
+    // Sample markdown table similar to backend output
+    const sampleMarkdown = `| **規格項目** | **AG958** | **APX958** |
+| --- | --- | --- |
+| **CPU** | Intel i7-12700H | AMD Ryzen 7 6800H |
+| **GPU** | RTX 3060 | RTX 3070 |
+| **Memory** | 16GB DDR5 | 32GB DDR5 |`;
+    
+    console.log('📄 Testing with sample markdown table:');
+    console.log(sampleMarkdown);
+    
+    // Test marked.js with configuration
+    try {
+        console.log('🧪 Testing configured marked.js...');
+        const markedResult = marked.parse(sampleMarkdown);
+        console.log('✅ marked.js conversion successful');
+        console.log('🔧 marked.js HTML result:', markedResult);
+        
+        // Check if result contains table elements
+        const hasTable = markedResult.includes('<table>');
+        const hasTh = markedResult.includes('<th>');
+        const hasTd = markedResult.includes('<td>');
+        
+        console.log('🔍 Table element check - <table>:', hasTable, '<th>:', hasTh, '<td>:', hasTd);
+        
+        if (hasTable && hasTh && hasTd) {
+            console.log('✅ marked.js produced proper table elements');
+        } else {
+            console.error('❌ marked.js did not produce proper table elements');
+            console.log('📄 Raw HTML output:', markedResult);
+        }
+    } catch (error) {
+        console.error('❌ marked.js conversion failed:', error);
+    }
+    
+    // Test custom parser
+    try {
+        const customResult = parseMarkdownTable(sampleMarkdown);
+        console.log('✅ Custom parser conversion completed');
+        console.log('🔧 Custom parser HTML result:', customResult);
+        
+        if (customResult.includes('<table>') && customResult.includes('<th>') && customResult.includes('<td>')) {
+            console.log('✅ Custom parser produced proper table elements');
+        } else {
+            console.warn('⚠️ Custom parser did not produce table elements (may be fallback text)');
+        }
+    } catch (error) {
+        console.error('❌ Custom parser failed:', error);
+    }
+}
+
+// Configure marked.js with GFM support
+function configureMarkedJS() {
+    if (typeof marked !== 'undefined') {
+        // Configure marked with GitHub Flavored Markdown support
+        marked.setOptions({
+            gfm: true,        // Enable GitHub Flavored Markdown
+            tables: true,     // Enable table support
+            breaks: false,    // Disable GFM line breaks (optional)
+            pedantic: false,  // Disable pedantic mode
+            sanitize: false,  // Don't sanitize HTML (we trust our content)
+            smartLists: true,
+            smartypants: false
+        });
+        console.log('✅ marked.js configured with GFM table support');
+        return true;
+    }
+    return false;
+}
+
+// Smart markdown renderer with fallback
+function renderMarkdownContent(markdownText) {
+    console.log('🎯 renderMarkdownContent called with:', typeof markdownText, 'length:', markdownText?.length);
+    console.log('📄 Actual content received:', JSON.stringify(markdownText));
+    
+    if (!markdownText || typeof markdownText !== 'string') {
+        console.log('❌ Invalid input - not a string or empty');
+        return markdownText;
+    }
+    
+    // Check if content contains table syntax
+    const hasTable = markdownText.includes('|') && markdownText.includes('---');
+    console.log('🔍 Table detection - Has | character:', markdownText.includes('|'), 'Has --- separator:', markdownText.includes('---'), 'Final result:', hasTable);
+    
+    if (!hasTable) {
+        console.log('📝 No table detected, using marked.js for general markdown');
+        // No table, use marked.js for other markdown or return as-is
+        if (typeof marked !== 'undefined' && marked.parse) {
+            return marked.parse(markdownText);
+        }
+        return markdownText.replace(/\n/g, '<br>');
+    }
+    
+    // Content has table - try marked.js first
+    if (typeof marked !== 'undefined' && marked.parse) {
+        try {
+            console.log('🧪 Trying marked.js table conversion...');
+            const markedResult = marked.parse(markdownText);
+            console.log('🔧 marked.js result:', markedResult);
+            
+            // Verify that marked.js actually created table elements
+            const hasTableElement = markedResult.includes('<table>');
+            const hasThElement = markedResult.includes('<th>');
+            console.log('✅ marked.js validation - Has <table>:', hasTableElement, 'Has <th>:', hasThElement);
+            
+            if (hasTableElement && hasThElement) {
+                console.log('✅ Using marked.js for table rendering');
+                return markedResult;
+            } else {
+                console.warn('⚠️ marked.js did not create proper table, falling back to custom parser');
+            }
+        } catch (error) {
+            console.error('❌ marked.js failed, falling back to custom parser:', error);
+        }
+    }
+    
+    // Fallback to custom parser for tables
+    console.log('🔧 Using custom parser for table rendering');
+    return parseMarkdownTable(markdownText);
+}
+
 function initSalesAI() {
-    if (salesAIInitialized) return;
+    console.log('Initializing Sales AI view...');
+    
+    // Check if marked.js is loaded and configure it
+    if (typeof marked !== 'undefined' && marked.parse) {
+        console.log('✅ marked.js is loaded and available');
+        configureMarkedJS();
+        testMarkdownTableConversion();
+    } else {
+        console.error('❌ marked.js is not available - tables may not render correctly');
+    }
+    
+    if (salesAIInitialized) {
+        console.log('Sales AI already initialized, returning...');
+        return;
+    }
+    
     salesAIInitialized = true;
-    console.log('Initializing Sales AI...');
+    console.log('Setting up Sales AI event listeners (one-time)...');
     
     // DOM 元素獲取
     const userInput = document.getElementById("userInput");
@@ -355,7 +570,7 @@ function initSalesAI() {
                 </div>
                 <div class="table-recommendations">
                     <div class="table-container recommendations-table-text">
-                        ${marked.parse(content.recommendations)}
+                        ${renderMarkdownContent(content.recommendations)}
                     </div>
                 </div>
                 <div class="action-buttons">
@@ -744,7 +959,9 @@ function initSalesAI() {
                 <div class="recommendations">
                     <h4>🎯 推薦結果</h4>
                     <div class="recommendation-content">
-                        ${typeof content.recommendations === 'string' ? marked.parse(content.recommendations) : JSON.stringify(content.recommendations)}
+                        ${typeof content.recommendations === 'string' ? 
+                          renderMarkdownContent(content.recommendations) : 
+                          JSON.stringify(content.recommendations)}
                     </div>
                 </div>
             `;
@@ -988,8 +1205,8 @@ function initSalesAI() {
                 </div>
             `;
         } else {
-            // 直接用 marked.parse 處理 markdownString，確保 .message-content 支援 markdown table
-            container.innerHTML = marked.parse(markdownString);
+            // 使用智能 markdown 渲染器處理內容，支援 markdown table
+            container.innerHTML = renderMarkdownContent(markdownString);
         }
         if (container.parentElement?.parentElement) {
              container.parentElement.parentElement.assistantData = content;
