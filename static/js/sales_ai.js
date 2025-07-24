@@ -968,22 +968,10 @@ function initSalesAI() {
         }
         
         html += `
-                <div class="actions">
-                    <button class="restart-multichat-btn">🔄 重新填寫問卷</button>
-                </div>
             </div>
         `;
         
         container.innerHTML = html;
-        
-        // 綁定重新開始按鈕
-        const restartBtn = container.querySelector('.restart-multichat-btn');
-        if (restartBtn) {
-            restartBtn.addEventListener('click', () => {
-                userInput.value = "請幫我一次性回答所有問題";
-                sendMessage();
-            });
-        }
     }
 
     // 處理 MultiChat 選項選擇
