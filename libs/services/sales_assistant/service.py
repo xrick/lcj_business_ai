@@ -2447,36 +2447,136 @@ Focus your analysis on the specific intent and target models identified above.
                     }
                 
                 # 轉換為字典格式
-                context_list_of_dicts = [dict(zip(self.spec_fields, record)) for record in full_specs_records]
-                logging.info(f"成功查詢到 {len(context_list_of_dicts)} 筆筆電數據")
+                full_context_list = [dict(zip(self.spec_fields, record)) for record in full_specs_records]
+                logging.info(f"成功查詢到 {len(full_context_list)} 筆筆電數據")
                 
-                # 構建推薦提示
+                # 優化數據傳輸：只選擇核心規格欄位，減少數據大小
+                core_fields = ['modeltype', 'modelname', 'cpu', 'gpu', 'memory', 'storage', 'lcd', 'battery']
+                
+                # 過濾並簡化數據
+                filtered_laptops = []
+                for laptop in full_context_list:
+                    # 創建簡化的筆電資料
+                    simplified_laptop = {}
+                    for field in core_fields:
+                        if field in laptop:
+                            simplified_laptop[field] = laptop[field]
+                    simplified_laptop['modelname'] = laptop.get('modelname', 'Unknown')
+                    filtered_laptops.append(simplified_laptop)
+                
+                # 限制發送的筆電數量以避免數據過大 - 只發送前5筆
+                limited_laptops = filtered_laptops[:5]
+                logging.info(f"優化後發送 {len(limited_laptops)} 筆簡化筆電數據到LLM")
+                
+                # 直接構建推薦提示，要求簡潔回應
                 multichat_prompt = f"""
-根據用戶通過多輪對話明確表達的需求偏好：
-{preferences_text}
+根據用戶需求：{preferences_text}
 
-請基於以下資訊提供精準的筆電推薦：
-- 所有偏好都已通過系統性問答收集
-- 推薦應嚴格符合用戶明確表達的偏好
-- 重點說明推薦機型如何滿足用戶的具體需求
-- 請提供3-5個最符合需求的機型推薦
+請推薦2-3個最適合的筆電機型，直接提供推薦結果，無需思考過程。
 
-{self.prompt_template}
+格式要求：
+1. 第一段：綜合分析推薦（2-3句話）
+2. 第二段開始：每行一個推薦機型，格式為「機型名稱 - 推薦原因」
+
+範例：
+綜合分析：根據您對輕薄辦公需求，推薦以下機型最符合您的使用情境。
+
+APX958 - 重量1.52kg符合輕薄需求，配備高效處理器適合辦公
+AG958P - 性能均衡且儲存容量大，適合商務應用  
+AG958 - 成本效益佳，基本辦公需求充分滿足
+
+請直接開始分析和推薦：
 """
                 
-                # 調用LLM
+                # 調用LLM - 使用簡化的數據
                 response_str = await self.llm.ainvoke(
-                    f"{multichat_prompt}\n\n使用者查詢: {enhanced_query}\n\n筆電資料:\n{json.dumps(context_list_of_dicts, ensure_ascii=False, indent=2)}"
+                    f"{multichat_prompt}\n\n使用者查詢: {enhanced_query}\n\n可用筆電機型 (已精簡核心規格):\n{json.dumps(limited_laptops, ensure_ascii=False, indent=2)}"
                 )
                 
-                return {
-                    "type": "multichat_complete",
-                    "message": "根據您的需求偏好，我們為您推薦以下筆電：",
-                    "enhanced_query": enhanced_query,
-                    "preferences_summary": preferences_summary,
-                    "recommendations": response_str,
-                    "db_filters": db_filters
-                }
+                # 解析LLM回應並生成markdown表格
+                try:
+                    # 解析回應內容
+                    lines = response_str.strip().split('\n')
+                    
+                    # 提取綜合分析（第一段）
+                    analysis_summary = ""
+                    recommendations = []
+                    
+                    analysis_done = False
+                    for line in lines:
+                        line = line.strip()
+                        if not line:
+                            continue
+                            
+                        if not analysis_done:
+                            # 第一段作為綜合分析
+                            if "分析" in line or "推薦" in line or "根據" in line:
+                                analysis_summary = line
+                                analysis_done = True
+                            elif analysis_summary and "-" not in line:
+                                analysis_summary += " " + line
+                        else:
+                            # 解析推薦機型行
+                            if "-" in line:
+                                parts = line.split("-", 1)
+                                if len(parts) == 2:
+                                    model_name = parts[0].strip()
+                                    reason = parts[1].strip()
+                                    recommendations.append({
+                                        "model_name": model_name,
+                                        "reason": reason
+                                    })
+                    
+                    # 如果沒有找到分析，使用第一行
+                    if not analysis_summary and recommendations:
+                        analysis_summary = "根據您的需求偏好，推薦以下筆電機型。"
+                    
+                    # 使用PrettyTable生成markdown表格
+                    if recommendations:
+                        table = PrettyTable()
+                        table.field_names = ["綜合分析推薦", "推薦機型", "推薦原因"]
+                        table.align = "l"  # 左對齊
+                        
+                        # 第一行包含分析總結
+                        first_rec = recommendations[0]
+                        table.add_row([analysis_summary, first_rec["model_name"], first_rec["reason"]])
+                        
+                        # 其餘推薦機型
+                        for rec in recommendations[1:]:
+                            table.add_row(["", rec["model_name"], rec["reason"]])
+                        
+                        # 生成markdown格式
+                        markdown_table = table.get_html_string().replace('<table>', '\n').replace('</table>', '\n')
+                        # 簡化為markdown格式
+                        markdown_table = table.get_string()
+                        
+                        logging.info("成功生成推薦表格")
+                        
+                        return {
+                            "type": "multichat_complete",
+                            "message": "根據您的需求偏好，我們為您推薦以下筆電：",
+                            "enhanced_query": enhanced_query,
+                            "preferences_summary": preferences_summary,
+                            "recommendations": markdown_table,
+                            "db_filters": db_filters,
+                            "is_table_format": True
+                        }
+                    else:
+                        raise ValueError("無法解析推薦內容")
+                        
+                except Exception as e:
+                    logging.warning(f"表格生成失敗，使用原始文字: {e}")
+                    
+                    # 回退到原始文字格式
+                    return {
+                        "type": "multichat_complete", 
+                        "message": "根據您的需求偏好，我們為您推薦以下筆電：",
+                        "enhanced_query": enhanced_query,
+                        "preferences_summary": preferences_summary,
+                        "recommendations": response_str,
+                        "db_filters": db_filters,
+                        "is_table_format": False
+                    }
                 
             except Exception as e:
                 logging.error(f"查詢推薦資料失敗: {e}", exc_info=True)

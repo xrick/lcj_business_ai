@@ -335,46 +335,161 @@ function initSalesAI() {
     function renderMultiChatComplete(container, content) {
         console.log("MultiChat 完成", content);
         
+        // 檢查是否為表格格式數據
+        if (content.is_table_format && content.recommendations) {
+            renderTableRecommendations(container, content);
+        } else if (content.is_structured && content.recommendations && Array.isArray(content.recommendations)) {
+            renderStructuredRecommendations(container, content);
+        } else {
+            // 回退到原始文字格式
+            renderLegacyRecommendations(container, content);
+        }
+    }
+    
+    function renderTableRecommendations(container, content) {
         let html = `
             <div class="multichat-complete">
-                <h3>✅ 需求分析完成</h3>
-                <p class="complete-message">${content.message || '根據您的需求，我們為您找到了最適合的筆電推薦！'}</p>
+                <div class="analysis-header">
+                    <h3>✅ 需求分析完成</h3>
+                    <p class="complete-message">${content.message || '根據您的需求，我們為您推薦以下筆電：'}</p>
+                </div>
+                <div class="table-recommendations">
+                    <div class="table-container recommendations-table-text">
+                        ${marked.parse(content.recommendations)}
+                    </div>
+                </div>
+                <div class="action-buttons">
+                    <button class="restart-multichat-btn">🔄 重新分析需求</button>
+                </div>
+            </div>
         `;
+        container.innerHTML = html;
+        bindRestartButton(container);
+    }
+    
+    function renderStructuredRecommendations(container, content) {
+        // 數據驗證
+        if (!content.recommendations || !Array.isArray(content.recommendations) || content.recommendations.length === 0) {
+            console.warn("推薦數據無效，回退到傳統格式");
+            renderLegacyRecommendations(container, content);
+            return;
+        }
         
-        if (content.recommendations && content.recommendations.length > 0) {
-            html += `
-                <div class="recommendations">
-                    <h4>🏆 推薦機型</h4>
-                    <div class="recommendation-list">
-            `;
-            
-            content.recommendations.forEach((rec, index) => {
-                html += `
-                    <div class="recommendation-item">
-                        <h5>${rec.model_name}</h5>
-                        <p class="rec-reason">${rec.reason}</p>
-                        <div class="rec-specs">
-                            <span>💻 ${rec.cpu || 'N/A'}</span>
-                            <span>🎮 ${rec.gpu || 'N/A'}</span>
-                            <span>🧠 ${rec.memory || 'N/A'}</span>
-                            <span>💰 ${rec.price || 'N/A'}</span>
+        try {
+            let html = `
+                <div class="multichat-complete">
+                    <div class="analysis-header">
+                        <h3>✅ 需求分析完成</h3>
+                        <div class="analysis-summary">
+                            <h4>📊 綜合分析推薦</h4>
+                            <p>${content.analysis_summary || '根據您的需求偏好，已為您精選出最適合的筆電機型。'}</p>
                         </div>
                     </div>
+                    
+                    <div class="recommendations-table-container">
+                        <h4>🏆 推薦結果</h4>
+                        <table class="recommendations-table">
+                            <thead>
+                                <tr>
+                                    <th>排名</th>
+                                    <th>機型名稱</th>
+                                    <th>核心規格</th>
+                                    <th>推薦原因</th>
+                                    <th>匹配度</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            // 添加推薦機型行
+            content.recommendations.forEach((rec, index) => {
+                if (!rec || typeof rec !== 'object') {
+                    console.warn(`推薦項目 ${index} 數據無效:`, rec);
+                    return;
+                }
+                
+                const rankClass = index === 0 ? 'rank-first' : index === 1 ? 'rank-second' : 'rank-third';
+                const rankIcon = index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉';
+                
+                // 安全的數據提取
+                const modelName = rec.model_name || `機型 ${index + 1}`;
+                const reason = rec.recommendation_reason || '推薦原因不詳';
+                const score = rec.match_score || null;
+                const specs = rec.key_specs || {};
+                
+                html += `
+                    <tr class="recommendation-row ${rankClass}">
+                        <td class="rank-cell">
+                            <span class="rank-icon">${rankIcon}</span>
+                            <span class="rank-number">${rec.rank || index + 1}</span>
+                        </td>
+                        <td class="model-cell">
+                            <strong>${modelName}</strong>
+                        </td>
+                        <td class="specs-cell">
+                            <div class="specs-list">
+                                <div>💻 ${specs.cpu || 'N/A'}</div>
+                                <div>🎮 ${specs.gpu || 'N/A'}</div>
+                                <div>🧠 ${specs.memory || 'N/A'}</div>
+                                <div>💾 ${specs.storage || 'N/A'}</div>
+                            </div>
+                        </td>
+                        <td class="reason-cell">
+                            ${reason}
+                        </td>
+                        <td class="score-cell">
+                            <div class="score-badge">
+                                <span class="score-number">${score || 'N/A'}</span>
+                                ${score ? '<span class="score-percent">%</span>' : ''}
+                            </div>
+                        </td>
+                    </tr>
                 `;
             });
             
             html += `
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button class="restart-multichat-btn">🔄 重新分析需求</button>
                     </div>
                 </div>
             `;
+            
+            container.innerHTML = html;
+            bindRestartButton(container);
+            
+        } catch (error) {
+            console.error("渲染結構化推薦時發生錯誤:", error);
+            renderLegacyRecommendations(container, content);
         }
-        
-        html += `
+    }
+    
+    function renderLegacyRecommendations(container, content) {
+        let html = `
+            <div class="multichat-complete">
+                <h3>✅ 需求分析完成</h3>
+                <p class="complete-message">${content.message || '根據您的需求，我們為您找到了最適合的筆電推薦！'}</p>
+                
+                <div class="legacy-recommendations">
+                    <div class="recommendations-text">
+                        ${typeof content.recommendations === 'string' ? 
+                          content.recommendations.replace(/\n/g, '<br>') : 
+                          JSON.stringify(content.recommendations)}
+                    </div>
+                </div>
+                
                 <button class="restart-multichat-btn">🔄 重新分析需求</button>
             </div>
         `;
         
         container.innerHTML = html;
+        bindRestartButton(container);
+    }
+    
+    function bindRestartButton(container) {
         
         // 綁定重新開始按鈕
         const restartBtn = container.querySelector('.restart-multichat-btn');

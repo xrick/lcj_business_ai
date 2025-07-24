@@ -1,5 +1,286 @@
 /* Components CSS for SalesRAG Integration */
 
+/* 🏆 MultiChat 推薦結果表格樣式 */
+.multichat-complete {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 16px 0;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+
+.analysis-header {
+    margin-bottom: 24px;
+    text-align: center;
+}
+
+.analysis-header h3 {
+    color: #2c5aa0;
+    font-size: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+
+.analysis-summary {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    border-left: 4px solid #2c5aa0;
+}
+
+.analysis-summary h4 {
+    color: #2c5aa0;
+    font-size: 18px;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.analysis-summary p {
+    color: #495057;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.recommendations-table-container {
+    margin: 24px 0;
+}
+
+.recommendations-table-container h4 {
+    color: #2c5aa0;
+    font-size: 20px;
+    margin-bottom: 16px;
+    text-align: center;
+    font-weight: 600;
+}
+
+.recommendations-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #ffffff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    margin: 0 auto;
+}
+
+.recommendations-table thead {
+    background: #2c5aa0;
+    color: #ffffff;
+}
+
+.recommendations-table th {
+    padding: 16px 12px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+}
+
+.recommendations-table td {
+    padding: 16px 12px;
+    text-align: center;
+    border-bottom: 1px solid #e9ecef;
+    vertical-align: middle;
+}
+
+/* 排名樣式 */
+.recommendation-row.rank-first {
+    background: linear-gradient(135deg, #d5f4e6 0%, #f0fff4 100%);
+    border-left: 4px solid #28a745;
+}
+
+.recommendation-row.rank-second {
+    background: linear-gradient(135deg, #e3f2fd 0%, #f8f9ff 100%);
+    border-left: 4px solid #007bff;
+}
+
+.recommendation-row.rank-third {
+    background: linear-gradient(135deg, #fff3e0 0%, #fffaf5 100%);
+    border-left: 4px solid #fd7e14;
+}
+
+.rank-cell {
+    min-width: 80px;
+}
+
+.rank-icon {
+    font-size: 20px;
+    margin-right: 8px;
+}
+
+.rank-number {
+    font-weight: 600;
+    color: #495057;
+}
+
+.model-cell {
+    min-width: 120px;
+}
+
+.model-cell strong {
+    color: #2c5aa0;
+    font-size: 16px;
+}
+
+.specs-cell {
+    text-align: left;
+    min-width: 200px;
+}
+
+.specs-list div {
+    margin: 4px 0;
+    padding: 2px 8px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #495057;
+}
+
+.reason-cell {
+    text-align: left;
+    max-width: 250px;
+    line-height: 1.5;
+    color: #495057;
+}
+
+.score-cell {
+    min-width: 80px;
+}
+
+.score-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #28a745;
+    color: #ffffff;
+    border-radius: 20px;
+    padding: 6px 12px;
+    font-weight: 600;
+}
+
+.score-number {
+    font-size: 16px;
+}
+
+.score-percent {
+    font-size: 12px;
+    margin-left: 2px;
+}
+
+.action-buttons {
+    text-align: center;
+    margin-top: 24px;
+}
+
+.restart-multichat-btn {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 25px;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 10px rgba(0,123,255,0.3);
+}
+
+.restart-multichat-btn:hover {
+    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,123,255,0.4);
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .recommendations-table {
+        font-size: 12px;
+    }
+    
+    .recommendations-table th,
+    .recommendations-table td {
+        padding: 12px 8px;
+    }
+    
+    .specs-list div {
+        font-size: 11px;
+        margin: 2px 0;
+        padding: 1px 6px;
+    }
+    
+    .model-cell strong {
+        font-size: 14px;
+    }
+    
+    .rank-icon {
+        font-size: 16px;
+    }
+    
+    .score-badge {
+        padding: 4px 8px;
+    }
+    
+    .score-number {
+        font-size: 14px;
+    }
+}
+
+/* 表格格式推薦樣式 */
+.table-recommendations {
+    margin: 24px 0;
+}
+
+.table-container {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    overflow-x: auto;
+}
+
+.recommendations-table-text {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #2c3e50;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 16px;
+    margin: 0;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+/* 響應式調整 */
+@media (max-width: 768px) {
+    .recommendations-table-text {
+        font-size: 12px;
+        padding: 12px;
+    }
+    
+    .table-container {
+        padding: 16px;
+        margin: 0 -8px;
+    }
+}
+
+/* 傳統文字格式樣式（回退） */
+.legacy-recommendations {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 16px 0;
+    border: 1px solid #e9ecef;
+}
+
+.recommendations-text {
+    line-height: 1.6;
+    color: #495057;
+    white-space: pre-wrap;
+}
+
 /* Navigation Section */
 .nav-section {
     padding: var(--space-16);
