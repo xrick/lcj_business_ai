@@ -1044,32 +1044,28 @@ class SalesAssistantService(BaseService):
             
             # 步驟1：檢查是否應該啟動多輪對話導引（最高優先級）
             should_start_multichat = self.multichat_manager.should_activate_multichat(query)
-            if should_start_multichat:
-                logging.info("檢測到模糊查詢，啟動多輪對話導引系統")
+            
+            # 擴展商務和筆電相關的觸發條件
+            business_keywords = ["商務", "辦公", "工作", "企業", "商用", "業務", "職場", "公司"]
+            laptop_keywords = ["筆電", "筆記本", "筆記型電腦", "laptop", "notebook", "電腦", "NB"]
+            introduction_keywords = ["介紹", "推薦", "建議", "選擇", "挑選", "適合", "需要"]
+            
+            # 檢查是否為商務筆電相關查詢
+            is_business_laptop_query = (
+                any(bk in query for bk in business_keywords) and 
+                any(lk in query for lk in laptop_keywords)
+            ) or (
+                any(lk in query for lk in laptop_keywords) and 
+                any(ik in query for ik in introduction_keywords)
+            )
+            
+            if should_start_multichat or is_business_laptop_query:
+                logging.info("檢測到模糊查詢或商務筆電查詢，直接啟動一次性問卷模式")
                 try:
-                    session_id, first_question = self.multichat_manager.start_multichat_flow(query)
-                    
-                    # 構建結構化的MultiChat開始回應
-                    multichat_start_response = {
-                        'type': 'multichat_start',
-                        'session_id': session_id,
-                        'message': f'我將通過幾個問題來了解您的需求，為您推薦最適合的筆電。',
-                        'first_question': {
-                            'question': first_question.question_text,
-                            'options': [
-                                {
-                                    'option_id': opt.option_id,
-                                    'label': opt.label,
-                                    'description': opt.description
-                                } for opt in first_question.options
-                            ],
-                            'current_step': first_question.step,
-                            'total_steps': len(self.multichat_manager.active_sessions[session_id].chat_chain.features_order)
-                        }
-                    }
-                    
-                    # 以串流方式返回多輪對話開始訊息
-                    yield f"data: {json.dumps(multichat_start_response, ensure_ascii=False)}\n\n"
+                    # 所有MultiChat查詢都使用一次性問卷模式
+                    logging.info("使用一次性問卷模式")
+                    all_questions_response = self.get_all_questions(query)
+                    yield f"data: {json.dumps(all_questions_response, ensure_ascii=False)}\n\n"
                     return
                     
                 except Exception as e:
@@ -2332,4 +2328,166 @@ Focus your analysis on the specific intent and target models identified above.
             return {
                 "answer_summary": "很抱歉，處理您的查詢時發生錯誤。請稍後重試。",
                 "comparison_table": []
+            }
+    
+    def get_all_questions(self, query: str = "") -> dict:
+        """
+        獲取所有多輪對話問題，用於一次性展示
+        
+        Args:
+            query: 使用者原始查詢
+            
+        Returns:
+            包含所有問題的字典
+        """
+        try:
+            logging.info("開始獲取所有多輪對話問題")
+            
+            # 生成對話鍊
+            chat_chain = self.multichat_manager.chat_generator.get_random_chain("random")
+            
+            # 構建所有問題
+            all_questions = []
+            for step, feature_id in enumerate(chat_chain.features_order):
+                feature = self.multichat_manager.nb_features[feature_id]
+                
+                question_data = {
+                    "step": step + 1,
+                    "feature_id": feature_id,
+                    "question": feature.question_template,
+                    "options": [
+                        {
+                            "option_id": opt.option_id,
+                            "label": opt.label,
+                            "description": opt.description
+                        } for opt in feature.options
+                    ]
+                }
+                all_questions.append(question_data)
+            
+            response = {
+                "type": "multichat_all_questions",
+                "message": "請回答以下所有問題，我們將為您推薦最適合的筆電。",
+                "questions": all_questions,
+                "total_questions": len(all_questions)
+            }
+            
+            logging.info(f"成功獲取 {len(all_questions)} 個問題")
+            return response
+            
+        except Exception as e:
+            logging.error(f"獲取所有問題失敗: {e}")
+            return {
+                "type": "error",
+                "message": "獲取問題列表時發生錯誤，請稍後重試。"
+            }
+    
+    async def process_all_questions_response(self, answers: dict) -> dict:
+        """
+        處理用戶對所有問題的回答
+        
+        Args:
+            answers: 包含所有問題答案的字典 {feature_id: option_id}
+            
+        Returns:
+            推薦結果
+        """
+        try:
+            logging.info(f"開始處理所有問題的回答: {answers}")
+            
+            # 構建偏好總結
+            preferences_summary = {}
+            db_filters = {}
+            
+            for feature_id, option_id in answers.items():
+                if feature_id in self.multichat_manager.nb_features:
+                    feature = self.multichat_manager.nb_features[feature_id]
+                    
+                    # 找到對應的選項
+                    selected_option = None
+                    for option in feature.options:
+                        if option.option_id == option_id:
+                            selected_option = option
+                            break
+                    
+                    if selected_option:
+                        preferences_summary[feature_id] = {
+                            "feature_name": feature.name,
+                            "selected_option": selected_option.label,
+                            "description": selected_option.description
+                        }
+                        
+                        # 合併資料庫篩選條件
+                        if selected_option.db_filter:
+                            db_filters.update(selected_option.db_filter)
+            
+            # 生成增強查詢
+            preferences_text = "\n".join([
+                f"- {pref_data['feature_name']}: {pref_data['selected_option']}"
+                for pref_data in preferences_summary.values()
+                if 'no_preference' not in pref_data.get('selected_option', '')
+            ])
+            
+            enhanced_query = f"根據以下偏好條件：{preferences_text}，請推薦適合的筆電"
+            
+            # 查詢相關資料
+            try:
+                # 這裡可以根據db_filters來查詢資料庫
+                # 目前先使用基本查詢獲取所有筆電數據
+                logging.info("開始查詢筆電規格數據")
+                
+                # 使用正確的SQL查詢方法
+                full_specs_records = self.duckdb_query.query("SELECT * FROM specs")
+                
+                if not full_specs_records:
+                    logging.warning("未查詢到任何筆電數據")
+                    return {
+                        "type": "error",
+                        "message": "目前沒有可用的筆電數據，請稍後重試。"
+                    }
+                
+                # 轉換為字典格式
+                context_list_of_dicts = [dict(zip(self.spec_fields, record)) for record in full_specs_records]
+                logging.info(f"成功查詢到 {len(context_list_of_dicts)} 筆筆電數據")
+                
+                # 構建推薦提示
+                multichat_prompt = f"""
+根據用戶通過多輪對話明確表達的需求偏好：
+{preferences_text}
+
+請基於以下資訊提供精準的筆電推薦：
+- 所有偏好都已通過系統性問答收集
+- 推薦應嚴格符合用戶明確表達的偏好
+- 重點說明推薦機型如何滿足用戶的具體需求
+- 請提供3-5個最符合需求的機型推薦
+
+{self.prompt_template}
+"""
+                
+                # 調用LLM
+                response_str = await self.llm.ainvoke(
+                    f"{multichat_prompt}\n\n使用者查詢: {enhanced_query}\n\n筆電資料:\n{json.dumps(context_list_of_dicts, ensure_ascii=False, indent=2)}"
+                )
+                
+                return {
+                    "type": "multichat_complete",
+                    "message": "根據您的需求偏好，我們為您推薦以下筆電：",
+                    "enhanced_query": enhanced_query,
+                    "preferences_summary": preferences_summary,
+                    "recommendations": response_str,
+                    "db_filters": db_filters
+                }
+                
+            except Exception as e:
+                logging.error(f"查詢推薦資料失敗: {e}", exc_info=True)
+                return {
+                    "type": "error",
+                    "message": f"查詢推薦資料時發生錯誤: {str(e)}。請檢查資料庫連接或稍後重試。"
+                }
+                
+        except Exception as e:
+            logging.error(f"處理所有問題回答失敗: {e}", exc_info=True)
+            return {
+                "type": "error",
+                "message": f"處理您的回答時發生錯誤: {str(e)}。請重新填寫問卷或稍後重試。"
             }

@@ -588,3 +588,340 @@
         gap: 12px;
     }
 }
+
+/* ✨ Auto Start Message Styles */
+.auto-start-message {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    margin: 20px 0;
+    border: 1px solid #e2e8f0;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.loading-text {
+    color: #64748b;
+    font-size: 1.1rem;
+    margin: 0;
+    font-weight: 500;
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #e2e8f0;
+    border-top: 4px solid #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ✨ MultiChat All Questions (Table Form) Styles */
+.multichat-all-container {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 16px 0;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.multichat-all-container h3 {
+    color: #1e293b;
+    margin: 0 0 12px 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.questions-progress {
+    text-align: center;
+    margin-bottom: 24px;
+    padding: 12px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.questions-progress .progress-text {
+    font-size: 1rem;
+    color: #475569;
+    font-weight: 500;
+}
+
+/* Questions Table Layout */
+.questions-table {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-bottom: 24px;
+}
+
+.question-row {
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.3s ease;
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 20px;
+    align-items: start;
+}
+
+.question-row.answered {
+    border-color: #10b981;
+    background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+}
+
+.question-row.unanswered {
+    border-color: #fbbf24;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+}
+
+.question-cell {
+    display: flex;
+    flex-direction: column;
+}
+
+.question-title {
+    color: #1e293b;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.options-cell {
+    display: flex;
+    flex-direction: column;
+}
+
+.option-buttons-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+/* Option Button Styles */
+.option-button {
+    display: block;
+    cursor: pointer;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+    background: white;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.option-button:hover {
+    border-color: #3b82f6;
+    background-color: #f8fafc;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+.option-button input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.option-button input[type="radio"]:checked + .option-content {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+}
+
+.option-button input[type="radio"]:checked {
+    outline: none;
+}
+
+.option-button:has(input[type="radio"]:checked) {
+    border-color: #3b82f6;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+}
+
+.option-content {
+    display: block;
+    border-radius: 6px;
+    padding: 8px 12px;
+    transition: all 0.2s ease;
+}
+
+.option-label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+
+.option-description {
+    display: block;
+    font-size: 0.85rem;
+    opacity: 0.8;
+    line-height: 1.3;
+}
+
+/* Form Actions */
+.form-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 20px;
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.submit-btn {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 14px 28px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 300px;
+}
+
+.submit-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.submit-btn:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Validation Messages */
+.validation-message {
+    font-size: 1rem;
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: 6px;
+    text-align: center;
+    min-height: 20px;
+}
+
+.validation-message.success {
+    color: #059669;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+}
+
+.validation-message.pending {
+    color: #d97706;
+    background: #fffbeb;
+    border: 1px solid #fed7aa;
+}
+
+/* Results Display */
+.preferences-summary {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+    border: 1px solid #e2e8f0;
+}
+
+.preferences-summary h4 {
+    color: #1e293b;
+    margin: 0 0 16px 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.preferences-list {
+    display: grid;
+    gap: 12px;
+}
+
+.preference-item {
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border-left: 4px solid #3b82f6;
+}
+
+.preference-item strong {
+    color: #1e293b;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.preference-item small {
+    color: #64748b;
+    font-size: 0.9rem;
+    display: block;
+}
+
+.recommendation-content {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+    border: 1px solid #e2e8f0;
+    line-height: 1.6;
+}
+
+/* Responsive Design for All Questions Form */
+@media (max-width: 968px) {
+    .question-row {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .option-buttons-group {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .multichat-all-container {
+        padding: 16px;
+        margin: 12px 0;
+    }
+    
+    .question-row {
+        padding: 16px;
+    }
+    
+    .submit-btn {
+        min-width: 100%;
+        padding: 12px 20px;
+        font-size: 1rem;
+    }
+    
+    .form-actions {
+        padding: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .question-title {
+        font-size: 1rem;
+    }
+    
+    .option-label {
+        font-size: 0.9rem;
+    }
+    
+    .option-description {
+        font-size: 0.8rem;
+    }
+}

@@ -122,19 +122,27 @@ function initSalesAI() {
     
     // ✨ MultiChat 渲染函數（必須在 renderMessageContent 之前定義）
     function renderMultiChatStart(container, content) {
-        console.log("開始 MultiChat 對話", content);
+        console.log("🚀 [renderMultiChatStart] 開始執行，content:", content);
+        console.log("🚀 [renderMultiChatStart] container:", container);
         
         let html = `
             <div class="multichat-container">
                 <h3>🎯 智能筆電推薦助手</h3>
                 <p class="multichat-intro">${content.message || '我將通過幾個問題來了解您的需求，為您推薦最適合的筆電。'}</p>
-                <div class="multichat-progress">
+                
+                <!-- 自動啟動一次性問卷模式 -->
+                <div class="auto-start-message">
+                    <p class="loading-text">正在為您準備問卷，請稍候...</p>
+                    <div class="loading-spinner"></div>
+                </div>
+                
+                <div class="multichat-progress" style="display: none;">
                     <div class="progress-bar">
                         <div class="progress-fill" style="width: 0%"></div>
                     </div>
                     <span class="progress-text">步驟 1 / 7</span>
                 </div>
-                <div class="multichat-question-area" id="multichat-questions">
+                <div class="multichat-question-area" id="multichat-questions" style="display: none;">
                     <!-- 問題會動態加載到這裡 -->
                 </div>
             </div>
@@ -142,11 +150,127 @@ function initSalesAI() {
         
         container.innerHTML = html;
         
-        // 開始第一個問題
-        if (content.first_question) {
-            setTimeout(() => {
-                renderMultiChatQuestionInArea(content.first_question);
-            }, 500);
+        // 自動啟動表格模式（一次性問卷）
+        console.log("📋 自動啟動表格模式");
+        setTimeout(() => {
+            startTableMode();
+        }, 1000); // 1秒後自動啟動
+        
+        console.log("🏁 [renderMultiChatStart] 函數執行完成");
+    }
+    
+    // 逐步模式已停用
+    
+    // 開始表格模式
+    async function startTableMode() {
+        console.log("📋 啟動表格模式，獲取所有問題...");
+        
+        try {
+            const response = await fetch("/api/sales/chat-stream", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    query: "請幫我一次性回答所有問題", 
+                    service_name: "sales_assistant" 
+                }),
+            });
+
+            if (!response.ok) throw new Error(`HTTP 錯誤！ 狀態: ${response.status}`);
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullResponseText = "";
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                fullResponseText += chunk;
+
+                const lines = fullResponseText.split('\n\n');
+                
+                for (let i = 0; i < lines.length - 1; i++) {
+                    const line = lines[i];
+                    if (line.startsWith('data: ')) {
+                        const jsonDataString = line.substring(6);
+                        if (jsonDataString) {
+                            try {
+                                const jsonData = JSON.parse(jsonDataString);
+                                if (jsonData.type === 'multichat_all_questions') {
+                                    // 創建新的消息容器並渲染表格問卷
+                                    const newContainer = createMessageContainer('assistant');
+                                    renderAllQuestionsForm(newContainer.querySelector('.message-content'), jsonData);
+                                    return;
+                                }
+                            } catch (e) {
+                                console.error("JSON 解析錯誤:", e);
+                            }
+                        }
+                    }
+                }
+                fullResponseText = lines[lines.length - 1];
+            }
+            
+        } catch (error) {
+            console.error("啟動表格模式失敗:", error);
+            alert(`啟動表格模式失敗: ${error.message}`);
+        }
+    }
+    
+    // 為特定容器啟動表格模式
+    async function startTableModeForContainer(container) {
+        console.log("📋 為特定容器啟動表格模式，獲取所有問題...");
+        
+        try {
+            const response = await fetch("/api/sales/chat-stream", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    query: "請幫我一次性回答所有問題", 
+                    service_name: "sales_assistant" 
+                }),
+            });
+
+            if (!response.ok) throw new Error(`HTTP 錯誤！ 狀態: ${response.status}`);
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullResponseText = "";
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                fullResponseText += chunk;
+
+                const lines = fullResponseText.split('\n\n');
+                
+                for (let i = 0; i < lines.length - 1; i++) {
+                    const line = lines[i];
+                    if (line.startsWith('data: ')) {
+                        const jsonDataString = line.substring(6);
+                        if (jsonDataString) {
+                            try {
+                                const jsonData = JSON.parse(jsonDataString);
+                                if (jsonData.type === 'multichat_all_questions') {
+                                    // 在指定容器中渲染表格問卷
+                                    renderAllQuestionsForm(container, jsonData);
+                                    return;
+                                }
+                            } catch (e) {
+                                console.error("JSON 解析錯誤:", e);
+                            }
+                        }
+                    }
+                }
+                fullResponseText = lines[lines.length - 1];
+            }
+            
+        } catch (error) {
+            console.error("為容器啟動表格模式失敗:", error);
+            container.innerHTML = `<p style="color: red;">啟動問卷失敗: ${error.message}</p>`;
         }
     }
 
@@ -156,8 +280,12 @@ function initSalesAI() {
     }
 
     function renderMultiChatQuestionInArea(questionData) {
+        console.log("📝 [renderMultiChatQuestionInArea] 開始渲染問題:", questionData);
         const questionsArea = document.getElementById('multichat-questions');
-        if (!questionsArea) return;
+        if (!questionsArea) {
+            console.error("❌ [renderMultiChatQuestionInArea] 找不到 multichat-questions 元素");
+            return;
+        }
         
         const { question, options, current_step, total_steps } = questionData;
         
@@ -194,12 +322,14 @@ function initSalesAI() {
         
         // 綁定選項點擊事件
         const optionBtns = questionsArea.querySelectorAll('.multichat-option-btn');
+        console.log("🎛️ [renderMultiChatQuestionInArea] 找到選項按鈕數量:", optionBtns.length);
         optionBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const optionId = btn.dataset.optionId;
                 handleMultiChatOptionSelected(optionId, current_step);
             });
         });
+        console.log("✅ [renderMultiChatQuestionInArea] 問題渲染完成");
     }
 
     function renderMultiChatComplete(container, content) {
@@ -257,6 +387,273 @@ function initSalesAI() {
         }
     }
 
+    // ✨ 新增：一次性問卷渲染函數
+    function renderAllQuestionsForm(container, content) {
+        console.log("🚀 [renderAllQuestionsForm] 開始執行，content:", content);
+        
+        if (!content.questions || !Array.isArray(content.questions)) {
+            console.error("❌ 無效的問題數據");
+            container.innerHTML = "<p>問題數據載入失敗</p>";
+            return;
+        }
+        
+        let html = `
+            <div class="multichat-all-container">
+                <h3>🎯 筆電需求問卷</h3>
+                <p class="multichat-intro">${content.message}</p>
+                <div class="questions-progress">
+                    <span class="progress-text">請回答以下 ${content.total_questions} 個問題</span>
+                </div>
+                <form id="all-questions-form" class="questions-table">
+        `;
+        
+        // 為每個問題生成一列
+        content.questions.forEach((questionData, index) => {
+            html += `
+                <div class="question-row" data-step="${questionData.step}" data-feature-id="${questionData.feature_id}">
+                    <div class="question-cell">
+                        <h4 class="question-title">${questionData.step}. ${questionData.question}</h4>
+                    </div>
+                    <div class="options-cell">
+                        <div class="option-buttons-group" data-question-id="${questionData.feature_id}">
+            `;
+            
+            // 為每個選項生成按鈕
+            questionData.options.forEach((option, optIndex) => {
+                html += `
+                    <label class="option-button">
+                        <input type="radio" name="${questionData.feature_id}" value="${option.option_id}" required>
+                        <span class="option-content">
+                            <span class="option-label">${option.label}</span>
+                            <span class="option-description">${option.description}</span>
+                        </span>
+                    </label>
+                `;
+            });
+            
+            html += `
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
+                </form>
+                <div class="form-actions">
+                    <button type="button" id="submit-all-answers-btn" class="submit-btn" disabled>
+                        📝 提交所有回答並獲得推薦
+                    </button>
+                    <div class="validation-message" id="validation-message"></div>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        
+        // 綁定事件處理器
+        setupAllQuestionsFormHandlers();
+        
+        console.log("✅ [renderAllQuestionsForm] 問卷渲染完成");
+    }
+    
+    // 設置問卷表單的事件處理器
+    function setupAllQuestionsFormHandlers() {
+        const form = document.getElementById('all-questions-form');
+        const submitBtn = document.getElementById('submit-all-answers-btn');
+        const validationMessage = document.getElementById('validation-message');
+        
+        if (!form || !submitBtn) {
+            console.error("❌ 找不到表單元素");
+            return;
+        }
+        
+        // 監聽表單變化，啟用/禁用提交按鈕
+        form.addEventListener('change', () => {
+            const isValid = validateAllQuestionsForm();
+            submitBtn.disabled = !isValid;
+            updateValidationMessage(isValid);
+        });
+        
+        // 提交按鈕點擊事件
+        submitBtn.addEventListener('click', handleAllQuestionsSubmit);
+        
+        console.log("✅ 問卷事件處理器設置完成");
+    }
+    
+    // 驗證所有問題是否已回答
+    function validateAllQuestionsForm() {
+        const form = document.getElementById('all-questions-form');
+        if (!form) return false;
+        
+        const questionRows = form.querySelectorAll('.question-row');
+        let answeredCount = 0;
+        
+        questionRows.forEach(row => {
+            const featureId = row.dataset.featureId;
+            const radioButtons = row.querySelectorAll(`input[name="${featureId}"]`);
+            const isAnswered = Array.from(radioButtons).some(radio => radio.checked);
+            
+            if (isAnswered) {
+                answeredCount++;
+                row.classList.remove('unanswered');
+                row.classList.add('answered');
+            } else {
+                row.classList.remove('answered');
+                row.classList.add('unanswered');
+            }
+        });
+        
+        return answeredCount === questionRows.length;
+    }
+    
+    // 更新驗證消息
+    function updateValidationMessage(isValid) {
+        const validationMessage = document.getElementById('validation-message');
+        if (!validationMessage) return;
+        
+        if (isValid) {
+            validationMessage.textContent = "✅ 所有問題已回答完畢，可以提交！";
+            validationMessage.className = "validation-message success";
+        } else {
+            const form = document.getElementById('all-questions-form');
+            const totalQuestions = form.querySelectorAll('.question-row').length;
+            const answeredQuestions = form.querySelectorAll('.question-row.answered').length;
+            
+            validationMessage.textContent = `⏳ 還需回答 ${totalQuestions - answeredQuestions} 個問題`;
+            validationMessage.className = "validation-message pending";
+        }
+    }
+    
+    // 處理所有問題提交
+    async function handleAllQuestionsSubmit() {
+        console.log("📤 開始提交所有問題的回答");
+        
+        const form = document.getElementById('all-questions-form');
+        const submitBtn = document.getElementById('submit-all-answers-btn');
+        
+        if (!validateAllQuestionsForm()) {
+            alert("請回答所有問題後再提交！");
+            return;
+        }
+        
+        // 收集所有答案
+        const answers = {};
+        const questionRows = form.querySelectorAll('.question-row');
+        
+        questionRows.forEach(row => {
+            const featureId = row.dataset.featureId;
+            const checkedRadio = row.querySelector(`input[name="${featureId}"]:checked`);
+            if (checkedRadio) {
+                answers[featureId] = checkedRadio.value;
+            }
+        });
+        
+        console.log("📋 收集到的答案:", answers);
+        
+        // 顯示提交狀態
+        submitBtn.disabled = true;
+        submitBtn.textContent = "⏳ 正在分析您的需求...";
+        
+        try {
+            const response = await fetch('/api/sales/multichat-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    answers: answers,
+                    service_name: 'sales_assistant'
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP錯誤！狀態: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log('📨 後端回應:', result);
+            
+            // 根據回應類型處理結果
+            if (result.type === 'multichat_complete') {
+                // 在當前容器中顯示完成結果
+                const currentContainer = document.querySelector('.multichat-all-container').parentElement;
+                renderMultiChatAllComplete(currentContainer, result);
+            } else if (result.type === 'error') {
+                alert(`處理錯誤: ${result.message}`);
+            }
+            
+        } catch (error) {
+            console.error('❌ 提交失敗:', error);
+            alert(`提交失敗: ${error.message}`);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "📝 提交所有回答並獲得推薦";
+        }
+    }
+    
+    // 渲染問卷完成結果
+    function renderMultiChatAllComplete(container, content) {
+        console.log("✅ 問卷完成，渲染結果", content);
+        
+        let html = `
+            <div class="multichat-complete">
+                <h3>🏆 需求分析完成</h3>
+                <p class="complete-message">${content.message}</p>
+        `;
+        
+        // 顯示用戶偏好總結
+        if (content.preferences_summary) {
+            html += `
+                <div class="preferences-summary">
+                    <h4>📋 您的需求偏好</h4>
+                    <div class="preferences-list">
+            `;
+            
+            Object.values(content.preferences_summary).forEach(pref => {
+                html += `
+                    <div class="preference-item">
+                        <strong>${pref.feature_name}:</strong> ${pref.selected_option}
+                        <small>${pref.description}</small>
+                    </div>
+                `;
+            });
+            
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+        
+        // 顯示推薦結果
+        if (content.recommendations) {
+            html += `
+                <div class="recommendations">
+                    <h4>🎯 推薦結果</h4>
+                    <div class="recommendation-content">
+                        ${typeof content.recommendations === 'string' ? content.recommendations : JSON.stringify(content.recommendations)}
+                    </div>
+                </div>
+            `;
+        }
+        
+        html += `
+                <div class="actions">
+                    <button class="restart-multichat-btn">🔄 重新填寫問卷</button>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        
+        // 綁定重新開始按鈕
+        const restartBtn = container.querySelector('.restart-multichat-btn');
+        if (restartBtn) {
+            restartBtn.addEventListener('click', () => {
+                userInput.value = "請幫我一次性回答所有問題";
+                sendMessage();
+            });
+        }
+    }
+
     // 處理 MultiChat 選項選擇
     async function handleMultiChatOptionSelected(optionId, currentStep) {
         console.log(`用戶選擇了選項: ${optionId}, 當前步驟: ${currentStep}`);
@@ -267,13 +664,30 @@ function initSalesAI() {
             questionsArea.innerHTML = '<div class="loading">處理中...</div>';
         }
         
+        // 獲取session_id（從多輪對話容器中獲取）
+        const multichartContainer = document.querySelector('.multichat-container');
+        let sessionId = null;
+        if (multichartContainer && multichartContainer.dataset.sessionId) {
+            sessionId = multichartContainer.dataset.sessionId;
+        }
+        
+        if (!sessionId) {
+            console.error("❌ 找不到 session_id");
+            if (questionsArea) {
+                questionsArea.innerHTML = '<div class="error">會話資訊遺失，請重新開始</div>';
+            }
+            return;
+        }
+        
         try {
             const response = await fetch('/api/sales/multichat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    option_id: optionId,
-                    current_step: currentStep
+                    session_id: sessionId,
+                    user_choice: optionId,
+                    user_input: "",
+                    service_name: "sales_assistant"
                 })
             });
             
@@ -319,15 +733,32 @@ function initSalesAI() {
             return;
         }
 
-        // ✨ 新增：處理 MultiChat 回應格式
+        // ✨ 新增：處理 MultiChat 回應格式（現在直接切換到問卷模式）
         if (content.type === 'multichat_start') {
-            console.log("檢測到 multichat_start，準備渲染");
-            if (typeof renderMultiChatStart === 'function') {
-                renderMultiChatStart(container, content);
+            console.log("🔥 檢測到 multichat_start，直接啟動問卷模式", content);
+            // 顯示載入提示
+            container.innerHTML = `
+                <div class="auto-start-message">
+                    <p class="loading-text">正在為您準備問卷，請稍候...</p>
+                    <div class="loading-spinner"></div>
+                </div>
+            `;
+            
+            // 1秒後自動啟動表格模式
+            setTimeout(() => {
+                startTableModeForContainer(container);
+            }, 1000);
+            return;
+        }
+        if (content.type === 'multichat_all_questions') {
+            console.log("🔥 檢測到 multichat_all_questions，準備渲染", content);
+            if (typeof renderAllQuestionsForm === 'function') {
+                console.log("✅ 開始執行 renderAllQuestionsForm");
+                renderAllQuestionsForm(container, content);
                 return;
             } else {
-                console.error("renderMultiChatStart 函數未定義");
-                container.innerHTML = "<p>MultiChat 功能載入中...</p>";
+                console.error("❌ renderAllQuestionsForm 函數未定義");
+                container.innerHTML = "<p>問卷功能載入中...</p>";
                 return;
             }
         }
@@ -429,8 +860,21 @@ function initSalesAI() {
             markdownString += `### 結論建議\n${content.conclusion}\n\n`;
         }
         
-        console.log("最終的 markdown 字串:", markdownString);
-        container.innerHTML = marked.parse(markdownString || "無法解析回應內容。");
+        console.log("📄 最終的 markdown 字串:", markdownString);
+        console.log("⚠️ [renderMessageContent] 到達函數末尾，這不應該發生在 MultiChat 模式下！");
+        
+        if (!markdownString) {
+            console.error("❌ markdown 字串為空，可能是數據解析問題");
+            container.innerHTML = `
+                <div class="error-message">
+                    <h4>🔧 處理中...</h4>
+                    <p>正在準備您的筆電推薦問卷，請稍候。</p>
+                    <div class="loading-spinner"></div>
+                </div>
+            `;
+        } else {
+            container.innerHTML = marked.parse(markdownString);
+        }
         if (container.parentElement?.parentElement) {
              container.parentElement.parentElement.assistantData = content;
         }

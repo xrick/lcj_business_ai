@@ -131,3 +131,33 @@ async def multichat_response(request: Request):
     except Exception as e:
         logging.error(f"Error in multichat: {e}")
         return JSONResponse(status_code=500, content={"error": "Internal Server Error"})
+
+@router.post("/multichat-all")
+async def multichat_all_questions(request: Request):
+    """處理所有問題的一次性回答提交"""
+    if not service_manager:
+        return JSONResponse(status_code=500, content={"error": "Service manager not available"})
+    
+    try:
+        data = await request.json()
+        answers = data.get("answers", {})
+        service_name = data.get("service_name", "sales_assistant")
+
+        if not answers:
+            return JSONResponse(status_code=400, content={"error": "answers are required"})
+
+        service = service_manager.get_service(service_name)
+        if not service:
+            return JSONResponse(status_code=404, content={"error": f"Service '{service_name}' not found"})
+
+        # 檢查服務是否支援process_all_questions_response方法
+        if not hasattr(service, 'process_all_questions_response'):
+            return JSONResponse(status_code=400, content={"error": "Service does not support multichat-all"})
+
+        # 處理所有問題的回答
+        result = await service.process_all_questions_response(answers)
+        return result
+
+    except Exception as e:
+        logging.error(f"Error in multichat-all: {e}")
+        return JSONResponse(status_code=500, content={"error": "Internal Server Error"})

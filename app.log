@@ -29,3 +29,7 @@ INFO:     127.0.0.1:40896 - "POST /api/sales/chat-stream HTTP/1.1" 200 OK
 2025-07-24 14:09:00,322 - root - INFO - 檢測到模糊查詢，啟動多輪對話導引系統
 2025-07-24 14:09:00,322 - root - INFO - 生成對話鍊: 3ceb60f6-72e7-4022-9ad8-f0bbe95782f8, 策略: random, 順序: ['memory', 'weight', 'storage', 'cpu', 'price', 'gpu', 'size']
 2025-07-24 14:09:00,322 - root - INFO - 開始多輪對話: e7eb7a27-7ef4-43e5-be3c-a617e1dd946a, 對話鍊: memory -> weight -> storage -> cpu -> price -> gpu -> size
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1509440]
