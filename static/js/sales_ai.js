@@ -744,7 +744,7 @@ function initSalesAI() {
                 <div class="recommendations">
                     <h4>🎯 推薦結果</h4>
                     <div class="recommendation-content">
-                        ${typeof content.recommendations === 'string' ? content.recommendations : JSON.stringify(content.recommendations)}
+                        ${typeof content.recommendations === 'string' ? marked.parse(content.recommendations) : JSON.stringify(content.recommendations)}
                     </div>
                 </div>
             `;
@@ -988,6 +988,7 @@ function initSalesAI() {
                 </div>
             `;
         } else {
+            // 直接用 marked.parse 處理 markdownString，確保 .message-content 支援 markdown table
             container.innerHTML = marked.parse(markdownString);
         }
         if (container.parentElement?.parentElement) {
