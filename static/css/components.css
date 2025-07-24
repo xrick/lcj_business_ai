@@ -335,3 +335,256 @@
         gap: var(--space-4);
     }
 }
+
+/* MultiChat UI Components */
+.multichat-container {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 16px 0;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.multichat-container h3 {
+    color: #1e293b;
+    margin: 0 0 12px 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+}
+
+.multichat-intro {
+    color: #64748b;
+    margin-bottom: 20px;
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+/* Progress Bar */
+.multichat-progress {
+    margin-bottom: 24px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background-color: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 0.9rem;
+    color: #64748b;
+    font-weight: 500;
+}
+
+/* Question Area */
+.multichat-question-area {
+    min-height: 200px;
+}
+
+.multichat-question {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.question-title {
+    color: #1e293b;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+/* Options */
+.multichat-options {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: 1fr;
+}
+
+.multichat-option-btn {
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.multichat-option-btn:hover {
+    border-color: #3b82f6;
+    background-color: #f8fafc;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.multichat-option-btn:active {
+    transform: translateY(0);
+}
+
+.option-label {
+    display: block;
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 1rem;
+    margin-bottom: 4px;
+}
+
+.option-description {
+    display: block;
+    color: #64748b;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+/* Complete Section */
+.multichat-complete {
+    text-align: center;
+    padding: 20px;
+}
+
+.multichat-complete h3 {
+    color: #059669;
+    margin-bottom: 12px;
+}
+
+.complete-message {
+    color: #64748b;
+    margin-bottom: 24px;
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+/* Recommendations */
+.recommendations {
+    margin: 24px 0;
+    text-align: left;
+}
+
+.recommendations h4 {
+    color: #1e293b;
+    margin-bottom: 16px;
+    font-size: 1.2rem;
+}
+
+.recommendation-list {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: 1fr;
+}
+
+.recommendation-item {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.recommendation-item h5 {
+    color: #1e293b;
+    margin: 0 0 8px 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.rec-reason {
+    color: #64748b;
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.rec-specs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.rec-specs span {
+    background: #f1f5f9;
+    color: #475569;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* Restart Button */
+.restart-multichat-btn {
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 16px;
+}
+
+.restart-multichat-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* Loading and Error States */
+.loading, .error {
+    text-align: center;
+    padding: 40px 20px;
+    font-size: 1rem;
+}
+
+.loading {
+    color: #64748b;
+}
+
+.error {
+    color: #dc2626;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+}
+
+/* Responsive Design for MultiChat */
+@media (max-width: 768px) {
+    .multichat-container {
+        padding: 16px;
+        margin: 12px 0;
+    }
+    
+    .multichat-options {
+        gap: 8px;
+    }
+    
+    .multichat-option-btn {
+        padding: 12px;
+    }
+    
+    .recommendation-list {
+        gap: 12px;
+    }
+}

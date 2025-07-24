@@ -1048,17 +1048,28 @@ class SalesAssistantService(BaseService):
                 logging.info("檢測到模糊查詢，啟動多輪對話導引系統")
                 try:
                     session_id, first_question = self.multichat_manager.start_multichat_flow(query)
-                    formatted_question = self.chat_template_manager.format_session_start(
-                        query, 
-                        self.chat_template_manager.format_question(
-                            first_question, 
-                            first_question.step, 
-                            len(self.multichat_manager.active_sessions[session_id].chat_chain.features_order)
-                        )
-                    )
+                    
+                    # 構建結構化的MultiChat開始回應
+                    multichat_start_response = {
+                        'type': 'multichat_start',
+                        'session_id': session_id,
+                        'message': f'我將通過幾個問題來了解您的需求，為您推薦最適合的筆電。',
+                        'first_question': {
+                            'question': first_question.question_text,
+                            'options': [
+                                {
+                                    'option_id': opt.option_id,
+                                    'label': opt.label,
+                                    'description': opt.description
+                                } for opt in first_question.options
+                            ],
+                            'current_step': first_question.step,
+                            'total_steps': len(self.multichat_manager.active_sessions[session_id].chat_chain.features_order)
+                        }
+                    }
                     
                     # 以串流方式返回多輪對話開始訊息
-                    yield f"data: {json.dumps({'type': 'multichat_start', 'session_id': session_id, 'content': formatted_question}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps(multichat_start_response, ensure_ascii=False)}\n\n"
                     return
                     
                 except Exception as e:

@@ -120,6 +120,188 @@ function initSalesAI() {
         scrollToBottom();
     }
     
+    // ✨ MultiChat 渲染函數（必須在 renderMessageContent 之前定義）
+    function renderMultiChatStart(container, content) {
+        console.log("開始 MultiChat 對話", content);
+        
+        let html = `
+            <div class="multichat-container">
+                <h3>🎯 智能筆電推薦助手</h3>
+                <p class="multichat-intro">${content.message || '我將通過幾個問題來了解您的需求，為您推薦最適合的筆電。'}</p>
+                <div class="multichat-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <span class="progress-text">步驟 1 / 7</span>
+                </div>
+                <div class="multichat-question-area" id="multichat-questions">
+                    <!-- 問題會動態加載到這裡 -->
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        
+        // 開始第一個問題
+        if (content.first_question) {
+            setTimeout(() => {
+                renderMultiChatQuestionInArea(content.first_question);
+            }, 500);
+        }
+    }
+
+    function renderMultiChatQuestion(container, content) {
+        console.log("渲染 MultiChat 問題", content);
+        renderMultiChatQuestionInArea(content);
+    }
+
+    function renderMultiChatQuestionInArea(questionData) {
+        const questionsArea = document.getElementById('multichat-questions');
+        if (!questionsArea) return;
+        
+        const { question, options, current_step, total_steps } = questionData;
+        
+        // 更新進度條
+        const progressFill = document.querySelector('.progress-fill');
+        const progressText = document.querySelector('.progress-text');
+        if (progressFill && progressText) {
+            const progress = (current_step / total_steps) * 100;
+            progressFill.style.width = `${progress}%`;
+            progressText.textContent = `步驟 ${current_step} / ${total_steps}`;
+        }
+        
+        let html = `
+            <div class="multichat-question" data-step="${current_step}">
+                <h4 class="question-title">${question}</h4>
+                <div class="multichat-options">
+        `;
+        
+        options.forEach((option, index) => {
+            html += `
+                <button class="multichat-option-btn" data-option-id="${option.option_id}">
+                    <span class="option-label">${option.label}</span>
+                    <span class="option-description">${option.description}</span>
+                </button>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+        
+        questionsArea.innerHTML = html;
+        
+        // 綁定選項點擊事件
+        const optionBtns = questionsArea.querySelectorAll('.multichat-option-btn');
+        optionBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const optionId = btn.dataset.optionId;
+                handleMultiChatOptionSelected(optionId, current_step);
+            });
+        });
+    }
+
+    function renderMultiChatComplete(container, content) {
+        console.log("MultiChat 完成", content);
+        
+        let html = `
+            <div class="multichat-complete">
+                <h3>✅ 需求分析完成</h3>
+                <p class="complete-message">${content.message || '根據您的需求，我們為您找到了最適合的筆電推薦！'}</p>
+        `;
+        
+        if (content.recommendations && content.recommendations.length > 0) {
+            html += `
+                <div class="recommendations">
+                    <h4>🏆 推薦機型</h4>
+                    <div class="recommendation-list">
+            `;
+            
+            content.recommendations.forEach((rec, index) => {
+                html += `
+                    <div class="recommendation-item">
+                        <h5>${rec.model_name}</h5>
+                        <p class="rec-reason">${rec.reason}</p>
+                        <div class="rec-specs">
+                            <span>💻 ${rec.cpu || 'N/A'}</span>
+                            <span>🎮 ${rec.gpu || 'N/A'}</span>
+                            <span>🧠 ${rec.memory || 'N/A'}</span>
+                            <span>💰 ${rec.price || 'N/A'}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+        
+        html += `
+                <button class="restart-multichat-btn">🔄 重新分析需求</button>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        
+        // 綁定重新開始按鈕
+        const restartBtn = container.querySelector('.restart-multichat-btn');
+        if (restartBtn) {
+            restartBtn.addEventListener('click', () => {
+                // 觸發新的 MultiChat 流程
+                userInput.value = "請幫我重新分析筆電需求";
+                sendMessage();
+            });
+        }
+    }
+
+    // 處理 MultiChat 選項選擇
+    async function handleMultiChatOptionSelected(optionId, currentStep) {
+        console.log(`用戶選擇了選項: ${optionId}, 當前步驟: ${currentStep}`);
+        
+        // 顯示加載狀態
+        const questionsArea = document.getElementById('multichat-questions');
+        if (questionsArea) {
+            questionsArea.innerHTML = '<div class="loading">處理中...</div>';
+        }
+        
+        try {
+            const response = await fetch('/api/sales/multichat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    option_id: optionId,
+                    current_step: currentStep
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP錯誤！狀態: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log('MultiChat API 回應:', result);
+            
+            // 根據回應類型處理
+            if (result.type === 'multichat_question') {
+                renderMultiChatQuestionInArea(result);
+            } else if (result.type === 'multichat_complete') {
+                const container = document.querySelector('#multichat-questions').closest('.multichat-container');
+                if (container) {
+                    renderMultiChatComplete(container, result);
+                }
+            }
+            
+        } catch (error) {
+            console.error('MultiChat API 錯誤:', error);
+            if (questionsArea) {
+                questionsArea.innerHTML = `<div class="error">處理錯誤: ${error.message}</div>`;
+            }
+        }
+    }
+    
     // ✨✨✨ 全新的、更強健的渲染函數 ✨✨✨
     function renderMessageContent(container, content) {
         console.log("renderMessageContent 被調用，content:", content);
@@ -135,6 +317,41 @@ function initSalesAI() {
         if (content.error) {
             container.innerHTML = `<p style="color: red;"><strong>錯誤：</strong> ${content.error}</p>`;
             return;
+        }
+
+        // ✨ 新增：處理 MultiChat 回應格式
+        if (content.type === 'multichat_start') {
+            console.log("檢測到 multichat_start，準備渲染");
+            if (typeof renderMultiChatStart === 'function') {
+                renderMultiChatStart(container, content);
+                return;
+            } else {
+                console.error("renderMultiChatStart 函數未定義");
+                container.innerHTML = "<p>MultiChat 功能載入中...</p>";
+                return;
+            }
+        }
+        if (content.type === 'multichat_question') {
+            console.log("檢測到 multichat_question，準備渲染");
+            if (typeof renderMultiChatQuestion === 'function') {
+                renderMultiChatQuestion(container, content);
+                return;
+            } else {
+                console.error("renderMultiChatQuestion 函數未定義");
+                container.innerHTML = "<p>MultiChat 功能載入中...</p>";
+                return;
+            }
+        }
+        if (content.type === 'multichat_complete') {
+            console.log("檢測到 multichat_complete，準備渲染");
+            if (typeof renderMultiChatComplete === 'function') {
+                renderMultiChatComplete(container, content);
+                return;
+            } else {
+                console.error("renderMultiChatComplete 函數未定義");
+                container.innerHTML = "<p>MultiChat 功能載入中...</p>";
+                return;
+            }
         }
 
         let markdownString = "";

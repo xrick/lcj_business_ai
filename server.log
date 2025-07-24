@@ -441,3 +441,7 @@ INFO:     127.0.0.1:44886 - "POST /api/sales/chat HTTP/1.1" 200 OK
 2025-07-24 12:16:47,488 - root - INFO - 生成對話鍊: 80cb9c14-0481-492c-94c2-19ff0317a8d3, 策略: random, 順序: ['weight', 'gpu', 'size', 'cpu', 'memory', 'price', 'storage']
 2025-07-24 12:16:47,488 - root - INFO - 開始多輪對話: f466a7bf-51da-4b4e-9214-cbe0425aeaa5, 對話鍊: weight -> gpu -> size -> cpu -> memory -> price -> storage
 INFO:     127.0.0.1:35604 - "POST /api/sales/chat HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1376044]

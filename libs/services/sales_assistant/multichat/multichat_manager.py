@@ -111,6 +111,9 @@ class MultichatManager:
             vague_keywords = self.trigger_keywords.get("vague_queries", [])
             comparison_keywords = self.trigger_keywords.get("comparison_queries", [])
             
+            logging.info(f"觸發關鍵字載入狀態 - 模糊查詢: {len(vague_keywords)} 個, 比較查詢: {len(comparison_keywords)} 個")
+            logging.info(f"正在檢查查詢: '{query}'")
+            
             query_lower = query.lower()
             
             # 檢查模糊查詢關鍵字
