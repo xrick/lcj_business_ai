@@ -5,6 +5,7 @@ from ..base_service import BaseService
 from ...RAG.DB.MilvusQuery import MilvusQuery
 from ...RAG.DB.DuckDBQuery import DuckDBQuery
 from ...RAG.LLM.LLMInitializer import LLMInitializer
+from .multichat import MultichatManager, ChatTemplateManager
 import logging
 import re
 
@@ -60,6 +61,10 @@ class SalesAssistantService(BaseService):
         
         # 載入關鍵字配置
         self.intent_keywords = self._load_intent_keywords("sales_rag_app/libs/services/sales_assistant/prompts/query_keywords.json")
+        
+        # 初始化多輪對話管理器
+        self.multichat_manager = MultichatManager()
+        self.chat_template_manager = ChatTemplateManager()
         
         # ★ 修正點 1：修正 spec_fields 列表，使其與 .xlsx 檔案的標題列完全一致
         self.spec_fields = [
@@ -990,6 +995,28 @@ class SalesAssistantService(BaseService):
             logging.error(f"获取数据时发生错误: {e}")
             raise
 
+    def _should_list_all_models(self, query: str) -> bool:
+        """
+        檢查是否應該列出所有型號和系列
+        只有明確要求列出所有機型的查詢才會觸發
+        """
+        query_lower = query.lower()
+        
+        # 明確的列表請求關鍵字
+        list_keywords = [
+            "列出所有", "列出全部", "所有的nb", "所有的筆電", "所有機型", "所有系列",
+            "你們賣的", "你們有的", "可以選擇的", "有哪些型號", "有哪些系列",
+            "請列出", "給我看", "展示所有", "所有型號", "全部型號", "全部機型"
+        ]
+        
+        # 檢查是否包含列表請求關鍵字
+        for keyword in list_keywords:
+            if keyword in query_lower:
+                logging.info(f"檢測到型號列表請求關鍵字: {keyword}")
+                return True
+        
+        return False
+
     async def chat_stream(self, query: str, **kwargs):
         """
         新的RAG流程：
@@ -1000,45 +1027,63 @@ class SalesAssistantService(BaseService):
         try:
             logging.info(f"開始新的RAG流程，查詢: {query}")
             
-            # 步骤1：解析查询意图
-            query_intent = self._parse_query_intent(query)
-            logging.info(f"查詢意圖解析結果: {query_intent}")
-            
-            # 检查是否有有效的查询类型
-            if query_intent["query_type"] == "unknown":
-                # 如果既没有modeltype也没有modelname，提供帮助信息
+            # 步驟0：檢查是否應該列出所有型號和系列
+            if self._should_list_all_models(query):
+                logging.info("檢測到型號列表請求，返回所有可用型號")
                 available_types_str = "\n".join([f"- {modeltype}" for modeltype in AVAILABLE_MODELTYPES])
                 available_models_str = "\n".join([f"- {model}" for model in AVAILABLE_MODELNAMES])
                 
-                # 检查查询中是否包含可能的错误模型名称
-                potential_models = re.findall(r'[A-Z]{2,3}\d{3}(?:-[A-Z]+)?(?::\s*[A-Z]+\d+)?', query)
-                error_message = f"您的查询中提到的模型名称不在我们的数据库中。"
+                list_message = f"可用的系列包括：\n{available_types_str}\n\n可用的型號包括：\n{available_models_str}\n\n請重新提問，例如：'比較 958 系列的 CPU 性能' 或 '比較 AB819-S: FP6 和 AG958 的 CPU 性能'"
                 
-                if potential_models:
-                    error_message += f"\n\n您提到的模型名称: {', '.join(potential_models)}"
-                    error_message += f"\n\n可能的正确模型名称:"
-                    # 为每个可能的错误模型提供建议
-                    for potential_model in potential_models:
-                        suggestions = []
-                        for available_model in AVAILABLE_MODELNAMES:
-                            # 简单的相似度检查
-                            if potential_model[:3] in available_model or potential_model[-3:] in available_model:
-                                suggestions.append(available_model)
-                        if suggestions:
-                            error_message += f"\n- '{potential_model}' 可能是: {', '.join(suggestions[:3])}"
-                
-                error_message += f"\n\n可用的系列包括：\n{available_types_str}"
-                error_message += f"\n\n可用的型號包括：\n{available_models_str}"
-                error_message += f"\n\n請重新提問，例如：'比較 958 系列的 CPU 性能' 或 '比較 AB819-S: FP6 和 AG958 的 CPU 性能'"
-                
-                error_obj = {
-                    "answer_summary": error_message,
+                list_response = {
+                    "answer_summary": list_message,
                     "comparison_table": []
                 }
-                yield f"data: {json.dumps(error_obj, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps(list_response, ensure_ascii=False)}\n\n"
                 return
             
-            # 步骤2：根据查询类型获取精确数据
+            # 步驟1：檢查是否應該啟動多輪對話導引（最高優先級）
+            should_start_multichat = self.multichat_manager.should_activate_multichat(query)
+            if should_start_multichat:
+                logging.info("檢測到模糊查詢，啟動多輪對話導引系統")
+                try:
+                    session_id, first_question = self.multichat_manager.start_multichat_flow(query)
+                    formatted_question = self.chat_template_manager.format_session_start(
+                        query, 
+                        self.chat_template_manager.format_question(
+                            first_question, 
+                            first_question.step, 
+                            len(self.multichat_manager.active_sessions[session_id].chat_chain.features_order)
+                        )
+                    )
+                    
+                    # 以串流方式返回多輪對話開始訊息
+                    yield f"data: {json.dumps({'type': 'multichat_start', 'session_id': session_id, 'content': formatted_question}, ensure_ascii=False)}\n\n"
+                    return
+                    
+                except Exception as e:
+                    logging.error(f"啟動多輪對話失敗: {e}")
+                    # 如果多輪對話啟動失敗，繼續使用原有流程
+            
+            # 步驟2：解析查詢意圖（只有在不觸發MultiChat時才執行）
+            query_intent = self._parse_query_intent(query)
+            logging.info(f"查詢意圖解析結果: {query_intent}")
+            
+            # 步驟3：檢查是否有有效的查詢類型
+            if query_intent["query_type"] == "unknown":
+                # 如果到這裡還是unknown，說明這是一個無法識別的查詢
+                # 但不是明確的型號列表請求，也不觸發MultiChat
+                # 這種情況比較少見，提供通用幫助
+                unknown_message = "很抱歉，我無法理解您的查詢。請提供更具體的問題，例如：\n- 詢問特定型號的規格\n- 比較不同型號的性能\n- 或者問我「請列出所有NB型號」來查看可用選項"
+                
+                unknown_response = {
+                    "answer_summary": unknown_message,
+                    "comparison_table": []
+                }
+                yield f"data: {json.dumps(unknown_response, ensure_ascii=False)}\n\n"
+                return
+            
+            # 步驟4：根據查詢類型獲取精確資料
             try:
                 context_list_of_dicts, target_modelnames = self._get_data_by_query_type(query_intent)
                 logging.info(f"成功获取数据，型号数量: {len(target_modelnames)}")
@@ -2130,3 +2175,150 @@ Focus your analysis on the specific intent and target models identified above.
         except Exception as e:
             logging.error(f"生成備用table失敗: {e}")
             return []
+    
+    async def process_multichat_response(self, session_id: str, user_choice: str, user_input: str = ""):
+        """
+        處理多輪對話回應
+        
+        Args:
+            session_id: 會話ID
+            user_choice: 使用者選擇
+            user_input: 使用者額外輸入
+            
+        Returns:
+            處理結果（字典格式）
+        """
+        try:
+            logging.info(f"處理多輪對話回應: session_id={session_id}, choice={user_choice}")
+            
+            # 獲取會話狀態
+            if session_id not in self.multichat_manager.active_sessions:
+                return {"error": "會話不存在或已過期"}
+            
+            session = self.multichat_manager.active_sessions[session_id]
+            
+            # 處理數字選擇轉換為option_id
+            current_feature_id = session.chat_chain.features_order[session.current_step]
+            current_feature = self.multichat_manager.nb_features[current_feature_id]
+            
+            # 如果是數字選擇，轉換為option_id
+            actual_choice = user_choice
+            if user_choice.isdigit():
+                choice_index = int(user_choice) - 1
+                if 0 <= choice_index < len(current_feature.options):
+                    actual_choice = current_feature.options[choice_index].option_id
+            
+            # 處理使用者回應
+            result = self.multichat_manager.process_feature_response(session_id, actual_choice, user_input)
+            
+            # 根據結果類型返回不同格式
+            if result["action"] == "continue":
+                # 繼續對話，返回下一個問題
+                formatted_question = self.chat_template_manager.format_question(
+                    result["next_question"],
+                    result["current_step"] + 1,
+                    result["total_steps"]
+                )
+                
+                return {
+                    "type": "multichat_continue",
+                    "content": formatted_question,
+                    "current_step": result["current_step"],
+                    "total_steps": result["total_steps"]
+                }
+                
+            elif result["action"] == "complete":
+                # 對話完成，執行最終查詢
+                logging.info("多輪對話完成，執行最終查詢")
+                
+                # 構建基於收集偏好的查詢意圖
+                enhanced_query = result["enhanced_query"]
+                preferences_summary = result["collected_preferences"]
+                
+                # 基於偏好構建query_intent
+                query_intent = self._build_query_intent_from_multichat(result)
+                
+                # 執行查詢
+                final_result = await self._execute_multichat_query(query_intent, preferences_summary, enhanced_query)
+                
+                # 清理會話
+                del self.multichat_manager.active_sessions[session_id]
+                
+                return {
+                    "type": "multichat_complete",
+                    "content": final_result,
+                    "enhanced_query": enhanced_query,
+                    "preferences": preferences_summary
+                }
+            
+        except Exception as e:
+            logging.error(f"處理多輪對話回應失敗: {e}")
+            return {"error": f"處理失敗: {str(e)}"}
+    
+    def _build_query_intent_from_multichat(self, multichat_result: dict) -> dict:
+        """從多輪對話結果構建查詢意圖"""
+        preferences = multichat_result.get("collected_preferences", {})
+        
+        query_intent = {
+            "modelnames": [],
+            "modeltypes": AVAILABLE_MODELTYPES.copy(),  # 預設包含所有系列
+            "intents": [],
+            "primary_intent": "multichat_guided",
+            "query_type": "model_type",
+            "confidence_score": 0.95,
+            "multichat_enhanced": True
+        }
+        
+        # 根據GPU偏好調整系列範圍
+        if "gpu" in preferences:
+            gpu_pref = preferences["gpu"]["selected_option"]
+            if "遊戲級" in gpu_pref or "創作級" in gpu_pref:
+                query_intent["modeltypes"] = ["958"]  # 高效能GPU通常在958系列
+            elif "內建顯卡" in gpu_pref:
+                query_intent["modeltypes"] = ["819", "839"]  # 內建顯卡通常在819/839系列
+        
+        return query_intent
+    
+    async def _execute_multichat_query(self, query_intent: dict, preferences_summary: dict, enhanced_query: str):
+        """執行多輪對話引導的查詢"""
+        try:
+            # 根據query_intent獲取資料
+            context_list_of_dicts, target_modelnames = self._get_data_by_query_type(query_intent)
+            
+            # 構建包含偏好的上下文
+            preferences_text = "\n".join([
+                f"- {feature_name}: {pref_data['selected_option']}"
+                for feature_name, pref_data in preferences_summary.items()
+                if pref_data.get('selected_option') and 'no_preference' not in pref_data.get('selected_option', '')
+            ])
+            
+            # 構建專用於多輪對話的提示模板
+            multichat_prompt = f"""
+根據用戶通過多輪對話明確表達的需求偏好：
+{preferences_text}
+
+請基於以下資訊提供精準的筆電推薦：
+- 所有偏好都已通過系統性問答收集
+- 推薦應嚴格符合用戶明確表達的偏好
+- 重點說明推薦機型如何滿足用戶的具體需求
+
+{self.prompt_template}
+"""
+            
+            # 調用LLM
+            response_str = await self.llm.ainvoke(
+                f"{multichat_prompt}\n\n使用者查詢: {enhanced_query}\n\n筆電資料:\n{json.dumps(context_list_of_dicts, ensure_ascii=False, indent=2)}"
+            )
+            
+            # 解析並返回結果
+            return {
+                "answer_summary": response_str,
+                "comparison_table": []
+            }
+            
+        except Exception as e:
+            logging.error(f"執行多輪對話查詢失敗: {e}")
+            return {
+                "answer_summary": "很抱歉，處理您的查詢時發生錯誤。請稍後重試。",
+                "comparison_table": []
+            }
