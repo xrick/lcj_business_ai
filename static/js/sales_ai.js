@@ -206,11 +206,15 @@ function initSalesAI() {
     
     // Check if marked.js is loaded and configure it
     if (typeof marked !== 'undefined' && marked.parse) {
-        console.log('✅ marked.js is loaded and available');
+        console.log('✅ marked.js is loaded and available (local version)');
+        console.log('📚 marked.js version:', marked?.options?.version || 'unknown');
         configureMarkedJS();
         testMarkdownTableConversion();
     } else {
-        console.error('❌ marked.js is not available - tables may not render correctly');
+        console.error('❌ marked.js is not available - tables will use fallback parser');
+        console.warn('🔧 Table rendering will rely on custom parseMarkdownTable() function');
+        // Still test the fallback parser
+        testMarkdownTableConversion();
     }
     
     if (salesAIInitialized) {

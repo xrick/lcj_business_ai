@@ -2468,26 +2468,24 @@ Focus your analysis on the specific intent and target models identified above.
                 limited_laptops = filtered_laptops[:5]
                 logging.info(f"優化後發送 {len(limited_laptops)} 筆簡化筆電數據到LLM")
                 
-                # 直接構建推薦提示，嚴格要求輸出格式
+                # 直接構建推薦提示，要求簡潔回應
                 multichat_prompt = f"""
 根據用戶需求：{preferences_text}
 
-重要指示：
-- 直接提供推薦結果，不要包含任何思考過程
-- 不要使用「我會分析」、「讓我看看」、「首先」、「接下來」等詞語
-- 不要包含分析步驟或解釋過程
+請推薦2-3個最適合的筆電機型，直接提供推薦結果，無需思考過程。
 
-輸出格式（嚴格遵守）：
-每行格式：機型名稱 - 推薦原因
+格式要求：
+1. 第一段：綜合分析推薦（2-3句話）
+2. 第二段開始：每行一個推薦機型，格式為「機型名稱 - 推薦原因」
 
-有效機型名稱僅限：AG958, AG958P, AG958V, APX958, AHP958, AKK839, ARB839, AB819-S: FP6, AMD819-S: FT6, AMD819: FT6, APX819: FP7R2, APX839, AHP819: FP7R2, AHP839, ARB819-S: FP7R2
+範例：
+綜合分析：根據您對輕薄辦公需求，推薦以下機型最符合您的使用情境。
 
-正確範例：
-APX958 - 高性能處理器和顯卡配置，適合專業工作需求
-AG958P - 均衡的性能配置，適合日常辦公和學習
-AHP958 - 旗艦級配置，適合高端應用需求
+APX958 - 重量1.52kg符合輕薄需求，配備高效處理器適合辦公
+AG958P - 性能均衡且儲存容量大，適合商務應用  
+AG958 - 成本效益佳，基本辦公需求充分滿足
 
-現在請直接提供推薦（只輸出機型和原因）：
+請直接開始分析和推薦：
 """
                 
                 # 調用LLM - 使用簡化的數據
@@ -2495,217 +2493,100 @@ AHP958 - 旗艦級配置，適合高端應用需求
                     f"{multichat_prompt}\n\n使用者查詢: {enhanced_query}\n\n可用筆電機型 (已精簡核心規格):\n{json.dumps(limited_laptops, ensure_ascii=False, indent=2)}"
                 )
                 
-                # 輸出驗證和清理機制
-                def validate_and_clean_response(raw_response: str) -> str:
-                    """驗證並清理LLM回應，確保輸出品質"""
-                    # 移除多餘的空白行和空格
-                    cleaned_response = '\n'.join(line.strip() for line in raw_response.split('\n') if line.strip())
-                    
-                    # 如果回應太短或明顯是錯誤格式，直接返回空字符串觸發fallback
-                    if len(cleaned_response) < 10:
-                        logging.warning("LLM回應過短，將使用fallback")
-                        return ""
-                    
-                    # 檢查是否包含思考過程指標詞
-                    thinking_indicators = [
-                        '我會分析', '讓我看看', '首先我需要', '接下來我會', '然後分析',
-                        '分析一下', '考慮以下', '檢查規格', '從中挑選', '我的任務是',
-                        '根據提供的', '將會推薦', '需要分析', '讓我們分析', '開始分析',
-                        '可以看出', '讓我檢查', '我來分析', '分析這些機型'
-                    ]
-                    
-                    # 如果回應主要是思考過程，觸發fallback
-                    if any(indicator in cleaned_response for indicator in thinking_indicators):
-                        thinking_count = sum(1 for indicator in thinking_indicators if indicator in cleaned_response)
-                        if thinking_count >= 2:  # 多個思考指標表明這是思考過程
-                            logging.warning(f"檢測到思考過程回應 (指標數: {thinking_count})，將使用fallback")
-                            return ""
-                    
-                    # 驗證是否包含有效的機型名稱
-                    valid_models = [
-                        'AG958', 'AG958P', 'AG958V', 'APX958', 'AHP958', 'AKK839', 'ARB839',
-                        'AB819-S: FP6', 'AMD819-S: FT6', 'AMD819: FT6', 'APX819: FP7R2', 
-                        'APX839', 'AHP819: FP7R2', 'AHP839', 'ARB819-S: FP7R2'
-                    ]
-                    
-                    found_valid_models = [model for model in valid_models if model in cleaned_response]
-                    if not found_valid_models:
-                        logging.warning("回應中未發現有效機型名稱，將使用fallback")
-                        return ""
-                    
-                    logging.info(f"驗證通過，發現有效機型: {found_valid_models}")
-                    return cleaned_response
-                
-                # 驗證LLM回應
-                validated_response = validate_and_clean_response(response_str)
-                if not validated_response:
-                    # 如果驗證失敗，直接觸發fallback
-                    raise ValueError("LLM回應驗證失敗")
-                
-                response_str = validated_response
-                
                 # 解析LLM回應並生成markdown表格
                 try:
-                    # 有效機型名稱列表（與prompt中一致）
-                    valid_model_names = [
-                        'AG958', 'AG958P', 'AG958V', 'APX958', 'AHP958', 'AKK839', 'ARB839',
-                        'AB819-S: FP6', 'AMD819-S: FT6', 'AMD819: FT6', 'APX819: FP7R2', 
-                        'APX839', 'AHP819: FP7R2', 'AHP839', 'ARB819-S: FP7R2'
-                    ]
-                    
-                    # 思考過程關鍵字（用於過濾）
-                    thinking_keywords = [
-                        '我會', '讓我', '首先', '接下來', '然後', '分析', '看看', '考慮', 
-                        '檢查', '搭下來', '從中挑選', '我的任務', '根據提供', '將會', 
-                        '需要分析', '讓我們', '開始分析', '可以看出'
-                    ]
-                    
                     # 解析回應內容
                     lines = response_str.strip().split('\n')
+                    
+                    # 提取綜合分析（第一段）
+                    analysis_summary = ""
                     recommendations = []
                     
-                    logging.info(f"LLM 原始回應: {response_str}")
-                    
+                    analysis_done = False
                     for line in lines:
                         line = line.strip()
-                        if not line or '-' not in line:
+                        if not line:
                             continue
-                        
-                        # 檢查是否包含思考過程關鍵字
-                        if any(keyword in line for keyword in thinking_keywords):
-                            logging.warning(f"過濾思考過程文字: {line}")
-                            continue
-                        
-                        # 解析機型名稱和推薦原因
-                        parts = line.split('-', 1)
-                        if len(parts) == 2:
-                            model_name = parts[0].strip()
-                            reason = parts[1].strip()
                             
-                            # 驗證機型名稱是否有效
-                            if model_name in valid_model_names:
-                                recommendations.append({
-                                    "model_name": model_name,
-                                    "reason": reason
-                                })
-                                logging.info(f"有效推薦已添加: {model_name} - {reason}")
-                            else:
-                                logging.warning(f"無效機型名稱被過濾: {model_name}")
+                        if not analysis_done:
+                            # 第一段作為綜合分析
+                            if "分析" in line or "推薦" in line or "根據" in line:
+                                analysis_summary = line
+                                analysis_done = True
+                            elif analysis_summary and "-" not in line:
+                                analysis_summary += " " + line
+                        else:
+                            # 解析推薦機型行
+                            if "-" in line:
+                                parts = line.split("-", 1)
+                                if len(parts) == 2:
+                                    model_name = parts[0].strip()
+                                    reason = parts[1].strip()
+                                    recommendations.append({
+                                        "model_name": model_name,
+                                        "reason": reason
+                                    })
                     
-                    logging.info(f"解析完成，共找到 {len(recommendations)} 個有效推薦")
+                    # 如果沒有找到分析，使用第一行
+                    if not analysis_summary and recommendations:
+                        analysis_summary = "根據您的需求偏好，推薦以下筆電機型。"
                     
                     # 生成標準 Markdown 表格
                     if recommendations:
-                        # 過濾出有效的推薦機型（必須有 model_name）
-                        valid_recommendations = [
-                            rec for rec in recommendations 
-                            if rec.get('model_name', '').strip()
-                        ]
+                        # 建立標準 Markdown 表格格式
+                        markdown_lines = []
                         
-                        if valid_recommendations:
-                            # 建立簡化的雙欄 Markdown 表格格式
-                            markdown_lines = []
-                            
-                            # 表格標題（移除綜合分析推薦欄位）
-                            header = "| 推薦機型 | 推薦原因 |"
-                            separator = "| --- | --- |"
-                            markdown_lines.append(header)
-                            markdown_lines.append(separator)
-                            
-                            # 添加有效的推薦機型行
-                            for rec in valid_recommendations:
-                                model_name = rec.get('model_name', '').strip()
-                                reason = rec.get('reason', '').strip()
-                                
-                                # 清理內容，改用短橫線替代管線符號
-                                clean_model = model_name.replace('\n', ' ').replace('|', '-')
-                                clean_reason = reason.replace('\n', ' ').replace('|', '-')
-                                
-                                row = f"| {clean_model} | {clean_reason} |"
-                                markdown_lines.append(row)
-                            
-                            # 生成最終的 markdown 表格
-                            markdown_table = "\n".join(markdown_lines)
-                            
-                            logging.info(f"成功生成推薦表格，包含 {len(valid_recommendations)} 個有效推薦")
-                            
-                            return {
-                                "type": "multichat_complete",
-                                "message": "根據您的需求偏好，我們為您推薦以下筆電：",
-                                "enhanced_query": enhanced_query,
-                                "preferences_summary": preferences_summary,
-                                "recommendations": markdown_table,
-                                "db_filters": db_filters,
-                                "is_table_format": True
-                            }
-                        else:
-                            # 沒有有效推薦時不顯示表格
-                            logging.warning("沒有有效的推薦機型，不生成表格")
-                            return {
-                                "type": "multichat_complete",
-                                "message": "抱歉，根據您的需求條件，目前沒有合適的機型推薦。請嘗試調整您的需求條件。",
-                                "enhanced_query": enhanced_query,
-                                "preferences_summary": preferences_summary,
-                                "recommendations": "",
-                                "db_filters": db_filters,
-                                "is_table_format": False
-                            }
+                        # 表格標題
+                        header = "| 綜合分析推薦 | 推薦機型 | 推薦原因 |"
+                        separator = "| --- | --- | --- |"
+                        markdown_lines.append(header)
+                        markdown_lines.append(separator)
+                        
+                        # 第一行包含分析總結
+                        first_rec = recommendations[0]
+                        # 清理內容，確保 Markdown 格式正確
+                        clean_analysis = analysis_summary.replace('\n', ' ').replace('|', '\\|')
+                        clean_model = first_rec['model_name'].replace('\n', ' ').replace('|', '\\|')
+                        clean_reason = first_rec['reason'].replace('\n', ' ').replace('|', '\\|')
+                        first_row = f"| {clean_analysis} | {clean_model} | {clean_reason} |"
+                        markdown_lines.append(first_row)
+                        
+                        # 其餘推薦機型
+                        for rec in recommendations[1:]:
+                            clean_model = rec['model_name'].replace('\n', ' ').replace('|', '\\|')
+                            clean_reason = rec['reason'].replace('\n', ' ').replace('|', '\\|')
+                            row = f"|  | {clean_model} | {clean_reason} |"
+                            markdown_lines.append(row)
+                        
+                        # 生成最終的 markdown 表格
+                        markdown_table = "\n".join(markdown_lines)
+                        
+                        logging.info("成功生成推薦表格")
+                        
+                        return {
+                            "type": "multichat_complete",
+                            "message": "根據您的需求偏好，我們為您推薦以下筆電：",
+                            "enhanced_query": enhanced_query,
+                            "preferences_summary": preferences_summary,
+                            "recommendations": markdown_table,
+                            "db_filters": db_filters,
+                            "is_table_format": True
+                        }
                     else:
                         raise ValueError("無法解析推薦內容")
                         
                 except Exception as e:
-                    logging.warning(f"表格生成失敗，使用智能fallback推薦: {e}")
+                    logging.warning(f"表格生成失敗，使用原始文字: {e}")
                     
-                    # 智能fallback推薦策略
-                    fallback_recommendations = []
-                    preferences_lower = preferences_text.lower()
-                    
-                    # 根據關鍵字提供智能推薦
-                    if any(keyword in preferences_lower for keyword in ['遊戲', 'gaming', '顯卡', 'gpu', '高效能']):
-                        fallback_recommendations = [
-                            ('AG958P', '高效能遊戲筆電，搭載強勁GPU'),
-                            ('APX958', '頂級遊戲配置，適合專業玩家'),
-                            ('AHP958', '平衡性能與攜帶性的遊戲機型')
-                        ]
-                    elif any(keyword in preferences_lower for keyword in ['商務', 'business', '辦公', '輕薄', '攜帶']):
-                        fallback_recommendations = [
-                            ('AKK839', '輕薄商務機型，長續航力'),
-                            ('ARB839', '專業商務配置，穩定可靠'),
-                            ('AB819-S: FP6', '超薄設計，商務首選')
-                        ]
-                    elif any(keyword in preferences_lower for keyword in ['性價比', '預算', '經濟', '入門']):
-                        fallback_recommendations = [
-                            ('AMD819: FT6', '高性價比選擇，性能穩定'),
-                            ('AMD819-S: FT6', '經濟實用型，適合日常使用'),
-                            ('APX819: FP7R2', '入門級高效能配置')
-                        ]
-                    else:
-                        # 通用推薦
-                        fallback_recommendations = [
-                            ('AG958', '全方位高效能機型'),
-                            ('AKK839', '商務辦公優選'),
-                            ('AMD819: FT6', '性價比推薦機型')
-                        ]
-                    
-                    # 生成fallback表格
-                    fallback_table_lines = [
-                        "| 推薦機型 | 推薦原因 |",
-                        "| --- | --- |"
-                    ]
-                    
-                    for model, reason in fallback_recommendations:
-                        fallback_table_lines.append(f"| {model} | {reason} |")
-                    
-                    fallback_table = '\n'.join(fallback_table_lines)
-                    
+                    # 回退到原始文字格式
                     return {
                         "type": "multichat_complete", 
                         "message": "根據您的需求偏好，我們為您推薦以下筆電：",
                         "enhanced_query": enhanced_query,
                         "preferences_summary": preferences_summary,
-                        "recommendations": fallback_table,
+                        "recommendations": response_str,
                         "db_filters": db_filters,
-                        "is_table_format": True
+                        "is_table_format": False
                     }
                 
             except Exception as e:
