@@ -191,3 +191,7 @@ APX958和AHP958：这两款的处理器是 Zen4 系列，性能更强，适合�
 2025-07-27 14:23:20,380 - root - INFO - 解析完成，共找到 0 個有效推薦
 2025-07-27 14:23:20,380 - root - WARNING - 表格生成失敗，使用智能fallback推薦: 無法解析推薦內容
 INFO:     127.0.0.1:54554 - "POST /api/sales/multichat-all HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [98547]
