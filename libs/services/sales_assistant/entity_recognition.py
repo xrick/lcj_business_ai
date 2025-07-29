@@ -98,7 +98,7 @@ class EntityRecognitionSystem:
             },
             'MODEL_TYPE': {
                 'patterns': [
-                    r'\b(?:819|839|958)\b'
+                    r'(?:819|839|928|958|960|AC01)(?=系列|型號|筆電|notebook|$|\s|[^\d])'
                 ],
                 'description': '型號系列識別'
             },
@@ -176,7 +176,7 @@ class EntityRecognitionSystem:
             else:
                 base_confidence = 0.7
         elif entity_type == 'MODEL_TYPE':
-            if match.group() in ['819', '839', '958']:
+            if match.group() in ['819', '839', '928', '958', '960', 'AC01']:
                 base_confidence = 1.0
             else:
                 base_confidence = 0.6

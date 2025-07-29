@@ -31,12 +31,29 @@ AVAILABLE_MODELNAMES = [
     'ARB839'
 ]
 
-# 全域變數：存儲所有可用的modeltype
-AVAILABLE_MODELTYPES = [
-    '819',
-    '839',
-    '958'
-]
+# 全域變數：存儲所有可用的modeltype (動態從數據庫獲取)
+AVAILABLE_MODELTYPES = []
+
+def _get_available_modeltypes_from_db():
+    """從數據庫動態獲取可用的modeltype"""
+    try:
+        from config import DB_PATH
+        import duckdb
+        
+        conn = duckdb.connect(str(DB_PATH))
+        result = conn.execute('SELECT DISTINCT modeltype FROM specs ORDER BY modeltype').fetchall()
+        conn.close()
+        
+        modeltypes = [row[0] for row in result]
+        logging.info(f"從數據庫獲取到的modeltype: {modeltypes}")
+        return modeltypes
+    except Exception as e:
+        logging.error(f"獲取數據庫modeltype失敗: {e}")
+        # 如果數據庫查詢失敗，返回默認值
+        return ['819', '839', '928', '958', '960', 'AC01']
+
+# 初始化時從數據庫獲取可用的modeltype
+AVAILABLE_MODELTYPES = _get_available_modeltypes_from_db()
 
 '''
 [
@@ -835,9 +852,23 @@ class SalesAssistantService(BaseService):
         found_modeltypes = []
         query_lower = query.lower()
         
+        # 檢查數據庫中存在的modeltype
         for modeltype in AVAILABLE_MODELTYPES:
             if modeltype.lower() in query_lower:
                 found_modeltypes.append(modeltype)
+        
+        # 如果沒有找到匹配，檢查是否查詢了不存在的數字系列
+        if not found_modeltypes:
+            import re
+            # 尋找查詢中的數字模式 (如656, 777等)
+            potential_series = re.findall(r'\b\d{3,4}\b', query)
+            if potential_series:
+                # 檢查是否為不存在的系列
+                non_existent_series = [s for s in potential_series if s not in AVAILABLE_MODELTYPES]
+                if non_existent_series:
+                    # 記錄查詢了不存在的系列
+                    logging.warning(f"查詢了不存在的系列: {non_existent_series}")
+                    # 這裡不返回True，但可以在上層處理這種情況
         
         return len(found_modeltypes) > 0, found_modeltypes
 
@@ -1082,10 +1113,20 @@ class SalesAssistantService(BaseService):
             
             # 步驟3：檢查是否有有效的查詢類型
             if query_intent["query_type"] == "unknown":
-                # 如果到這裡還是unknown，說明這是一個無法識別的查詢
-                # 但不是明確的型號列表請求，也不觸發MultiChat
-                # 這種情況比較少見，提供通用幫助
-                unknown_message = "很抱歉，我無法理解您的查詢。請提供更具體的問題，例如：\n- 詢問特定型號的規格\n- 比較不同型號的性能\n- 或者問我「請列出所有NB型號」來查看可用選項"
+                # 檢查是否查詢了不存在的系列
+                import re
+                potential_series = re.findall(r'\b\d{3,4}\b', query)
+                non_existent_series = [s for s in potential_series if s not in AVAILABLE_MODELTYPES]
+                
+                if non_existent_series:
+                    # 提供友善的錯誤訊息，告知不存在的系列
+                    available_types_str = "、".join(AVAILABLE_MODELTYPES)
+                    unknown_message = f"很抱歉，目前沒有 {non_existent_series[0]} 系列的筆電資料。\n\n目前可查詢的系列包括：{available_types_str}\n\n您可以嘗試：\n- 詢問現有系列的規格，例如「請比較958系列的筆電」\n- 查看特定型號，例如「AG958的規格如何」\n- 或者問我「請列出所有NB型號」來查看完整選項"
+                else:
+                    # 如果到這裡還是unknown，說明這是一個無法識別的查詢
+                    # 但不是明確的型號列表請求，也不觸發MultiChat
+                    # 這種情況比較少見，提供通用幫助
+                    unknown_message = "很抱歉，我無法理解您的查詢。請提供更具體的問題，例如：\n- 詢問特定型號的規格\n- 比較不同型號的性能\n- 或者問我「請列出所有NB型號」來查看可用選項"
                 
                 unknown_response = {
                     "answer_summary": unknown_message,
