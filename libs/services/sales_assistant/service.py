@@ -12,24 +12,41 @@ import re
 # 設定日誌
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-# 全域變數：存儲所有可用的modelname
-AVAILABLE_MODELNAMES = [
-    'AB819-S: FP6',
-    'AG958',
-    'AG958P',
-    'AG958V',
-    'AHP819: FP7R2',
-    'AHP839',
-    'AHP958',
-    'AKK839',
-    'AMD819-S: FT6',
-    'AMD819: FT6',
-    'APX819: FP7R2',
-    'APX839',
-    'APX958',
-    'ARB819-S: FP7R2',
-    'ARB839'
-]
+# 全域變數：存儲所有可用的modelname (動態從數據庫獲取)
+AVAILABLE_MODELNAMES = []
+
+def _get_available_modelnames_from_db():
+    """從數據庫動態獲取可用的modelname"""
+    try:
+        from config import DB_PATH
+        import duckdb
+        
+        conn = duckdb.connect(str(DB_PATH))
+        # 排除測試資料和空值，只獲取有效的modelname
+        result = conn.execute("""
+            SELECT DISTINCT modelname 
+            FROM specs 
+            WHERE modelname IS NOT NULL 
+              AND modelname != '' 
+              AND modelname != 'Test Model'
+            ORDER BY modelname
+        """).fetchall()
+        conn.close()
+        
+        modelnames = [row[0] for row in result]
+        logging.info(f"從數據庫獲取到的modelname: {len(modelnames)} 個")
+        return modelnames
+    except Exception as e:
+        logging.error(f"獲取數據庫modelname失敗: {e}")
+        # 如果數據庫查詢失敗，返回默認值
+        return [
+            'AB819-S: FP6', 'AG958', 'AG958P', 'AG958V', 'AHP819: FP7R2',
+            'AHP839', 'AHP958', 'AKK839', 'AMD819-S: FT6', 'AMD819: FT6',
+            'APX819: FP7R2', 'APX839', 'APX958', 'ARB819-S: FP7R2', 'ARB839'
+        ]
+
+# 初始化時從數據庫獲取可用的modelname
+AVAILABLE_MODELNAMES = _get_available_modelnames_from_db()
 
 # 全域變數：存儲所有可用的modeltype (動態從數據庫獲取)
 AVAILABLE_MODELTYPES = []
@@ -73,7 +90,11 @@ class SalesAssistantService(BaseService):
         self.llm = self.llm_initializer.get_llm()
         
         self.milvus_query = MilvusQuery(collection_name="sales_notebook_specs")
-        self.duckdb_query = DuckDBQuery(db_file="sales_rag_app/db/sales_specs.db")
+        
+        # 使用config中的DB_PATH確保路徑正確
+        from config import DB_PATH
+        self.duckdb_query = DuckDBQuery(db_file=str(DB_PATH))
+        
         self.prompt_template = self._load_prompt_template("sales_rag_app/libs/services/sales_assistant/prompts/sales_prompt.txt")
         
         # 載入關鍵字配置
@@ -877,18 +898,17 @@ class SalesAssistantService(BaseService):
         根據modeltype獲取所有相關的modelname
         """
         try:
-            # 使用DuckDB查詢包含該modeltype的所有modelname
-            sql_query = "SELECT DISTINCT modelname FROM specs WHERE modelname LIKE ?"
-            pattern = f"%{modeltype}%"
+            # 使用DuckDB直接查詢該modeltype的所有modelname
+            sql_query = "SELECT DISTINCT modelname FROM specs WHERE modeltype = ?"
             
-            results = self.duckdb_query.query_with_params(sql_query, [pattern])
+            results = self.duckdb_query.query_with_params(sql_query, [modeltype])
             
             if results:
                 modelnames = [record[0] for record in results]
                 logging.info(f"根據modeltype '{modeltype}' 找到的modelname: {modelnames}")
                 return modelnames
             else:
-                logging.warning(f"未找到包含modeltype '{modeltype}' 的modelname")
+                logging.warning(f"未找到modeltype '{modeltype}' 的modelname")
                 return []
                 
         except Exception as e:
