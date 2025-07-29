@@ -96,15 +96,16 @@ class MultichatManager:
         
         return features
     
-    def should_activate_multichat(self, query: str) -> bool:
+    def should_activate_multichat(self, query: str) -> Tuple[bool, Optional[str]]:
         """
-        判斷是否應該啟動多輪對話
+        判斷是否應該啟動多輪對話，並識別查詢場景類型
         
         Args:
             query: 使用者查詢
             
         Returns:
-            是否應該啟動多輪對話
+            (是否應該啟動多輪對話, 場景類型)
+            場景類型可能為: "business", "gaming", "creation", "study", "general" 或 None
         """
         try:
             # 檢查觸發關鍵字
@@ -116,29 +117,53 @@ class MultichatManager:
             
             query_lower = query.lower()
             
+            # 場景識別關鍵詞
+            business_keywords = ["商務", "辦公", "工作", "企業", "商用", "業務", "職場", "公司", 
+                               "文書處理", "文書", "處理", "office", "business", "工作用", "上班", 
+                               "會議", "報告", "簡報", "excel", "word", "ppt", "專業工作"]
+            gaming_keywords = ["遊戲", "gaming", "電競", "遊戲用", "玩遊戲", "game", "fps", "moba", 
+                             "顯卡", "gpu", "高畫質", "高效能遊戲"]
+            creation_keywords = ["創作", "設計", "繪圖", "影片編輯", "剪輯", "photoshop", "3d建模", 
+                               "渲染", "creator", "design", "創意", "美工"]
+            study_keywords = ["學習", "學生", "讀書", "課業", "上課", "study", "student", "教育", 
+                            "大學生", "高中生", "研究", "論文"]
+            
+            # 識別場景類型
+            detected_scenario = None
+            if any(keyword in query_lower for keyword in business_keywords):
+                detected_scenario = "business"
+            elif any(keyword in query_lower for keyword in gaming_keywords):
+                detected_scenario = "gaming"
+            elif any(keyword in query_lower for keyword in creation_keywords):
+                detected_scenario = "creation"
+            elif any(keyword in query_lower for keyword in study_keywords):
+                detected_scenario = "study"
+            else:
+                detected_scenario = "general"
+            
             # 檢查模糊查詢關鍵字
             for keyword in vague_keywords:
                 if keyword in query_lower:
-                    logging.info(f"檢測到模糊查詢關鍵字: {keyword}")
-                    return True
+                    logging.info(f"檢測到模糊查詢關鍵字: {keyword}, 場景類型: {detected_scenario}")
+                    return True, detected_scenario
             
             # 檢查比較查詢關鍵字（某些情況下也需要引導）
             for keyword in comparison_keywords:
                 if keyword in query_lower and not self._has_specific_models(query):
-                    logging.info(f"檢測到模糊比較查詢: {keyword}")
-                    return True
+                    logging.info(f"檢測到模糊比較查詢: {keyword}, 場景類型: {detected_scenario}")
+                    return True, detected_scenario
             
             # 檢查是否包含使用場景描述但沒有具體機型
             scenario_keywords = ["適合", "用於", "專門", "主要", "需要", "想要", "希望", "打算"]
             if any(keyword in query_lower for keyword in scenario_keywords) and not self._has_specific_models(query):
-                logging.info(f"檢測到使用場景查詢，啟動引導")
-                return True
+                logging.info(f"檢測到使用場景查詢，啟動引導，場景類型: {detected_scenario}")
+                return True, detected_scenario
             
-            return False
+            return False, None
             
         except Exception as e:
             logging.error(f"判斷是否啟動多輪對話時發生錯誤: {e}")
-            return False
+            return False, None
     
     def _has_specific_models(self, query: str) -> bool:
         """檢查查詢是否包含具體的機型"""

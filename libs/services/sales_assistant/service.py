@@ -1043,10 +1043,10 @@ class SalesAssistantService(BaseService):
                 return
             
             # 步驟1：檢查是否應該啟動多輪對話導引（最高優先級）
-            should_start_multichat = self.multichat_manager.should_activate_multichat(query)
+            should_start_multichat, detected_scenario = self.multichat_manager.should_activate_multichat(query)
             
             # 擴展商務和筆電相關的觸發條件
-            business_keywords = ["商務", "辦公", "工作", "企業", "商用", "業務", "職場", "公司"]
+            business_keywords = ["商務", "辦公", "工作", "企業", "商用", "業務", "職場", "公司", "文書處理", "文書", "處理"]
             laptop_keywords = ["筆電", "筆記本", "筆記型電腦", "laptop", "notebook", "電腦", "NB"]
             introduction_keywords = ["介紹", "推薦", "建議", "選擇", "挑選", "適合", "需要"]
             
@@ -1059,12 +1059,16 @@ class SalesAssistantService(BaseService):
                 any(ik in query for ik in introduction_keywords)
             )
             
+            # 如果商務筆電查詢但沒有檢測到場景，設定為business
+            if is_business_laptop_query and not detected_scenario:
+                detected_scenario = "business"
+            
             if should_start_multichat or is_business_laptop_query:
-                logging.info("檢測到模糊查詢或商務筆電查詢，直接啟動一次性問卷模式")
+                logging.info(f"檢測到模糊查詢或商務筆電查詢，場景類型: {detected_scenario}，直接啟動一次性問卷模式")
                 try:
-                    # 所有MultiChat查詢都使用一次性問卷模式
-                    logging.info("使用一次性問卷模式")
-                    all_questions_response = self.get_all_questions(query)
+                    # 所有MultiChat查詢都使用一次性問卷模式，並傳遞場景資訊
+                    logging.info(f"使用一次性問卷模式，場景: {detected_scenario}")
+                    all_questions_response = self.get_all_questions(query, scenario=detected_scenario)
                     yield f"data: {json.dumps(all_questions_response, ensure_ascii=False)}\n\n"
                     return
                     
@@ -2330,21 +2334,30 @@ Focus your analysis on the specific intent and target models identified above.
                 "comparison_table": []
             }
     
-    def get_all_questions(self, query: str = "") -> dict:
+    def get_all_questions(self, query: str = "", scenario: str = None) -> dict:
         """
         獲取所有多輪對話問題，用於一次性展示
         
         Args:
             query: 使用者原始查詢
+            scenario: 場景類型 ("business", "gaming", "creation", "study", "general")
             
         Returns:
             包含所有問題的字典
         """
         try:
-            logging.info("開始獲取所有多輪對話問題")
+            logging.info(f"開始獲取所有多輪對話問題，場景: {scenario}")
             
-            # 生成對話鍊
-            chat_chain = self.multichat_manager.chat_generator.get_random_chain("random")
+            # 根據場景生成對話鍊
+            if scenario and scenario != "general":
+                try:
+                    chat_chain = self.multichat_manager.chat_generator.get_chain_by_scenario(scenario)
+                    logging.info(f"使用場景特定對話鍊: {scenario}")
+                except Exception as e:
+                    logging.warning(f"無法獲取場景特定對話鍊 {scenario}: {e}，使用隨機對話鍊")
+                    chat_chain = self.multichat_manager.chat_generator.get_random_chain("random")
+            else:
+                chat_chain = self.multichat_manager.chat_generator.get_random_chain("random")
             
             # 構建所有問題
             all_questions = []
@@ -2661,17 +2674,17 @@ AHP958 - 旗艦級配置，適合高端應用需求
                     preferences_lower = preferences_text.lower()
                     
                     # 根據關鍵字提供智能推薦
-                    if any(keyword in preferences_lower for keyword in ['遊戲', 'gaming', '顯卡', 'gpu', '高效能']):
+                    if any(keyword in preferences_lower for keyword in ['文書處理', '文書', '處理', 'office', '辦公軟體', 'word', 'excel', 'ppt', '商務', 'business', '辦公', '輕薄', '攜帶']):
+                        fallback_recommendations = [
+                            ('AKK839', '輕薄商務機型，適合文書處理，長續航力'),
+                            ('ARB839', '專業商務配置，文書處理效率高，穩定可靠'),
+                            ('AB819-S: FP6', '超薄設計，商務辦公首選，適合文書處理')
+                        ]
+                    elif any(keyword in preferences_lower for keyword in ['遊戲', 'gaming', '顯卡', 'gpu', '高效能']):
                         fallback_recommendations = [
                             ('AG958P', '高效能遊戲筆電，搭載強勁GPU'),
                             ('APX958', '頂級遊戲配置，適合專業玩家'),
                             ('AHP958', '平衡性能與攜帶性的遊戲機型')
-                        ]
-                    elif any(keyword in preferences_lower for keyword in ['商務', 'business', '辦公', '輕薄', '攜帶']):
-                        fallback_recommendations = [
-                            ('AKK839', '輕薄商務機型，長續航力'),
-                            ('ARB839', '專業商務配置，穩定可靠'),
-                            ('AB819-S: FP6', '超薄設計，商務首選')
                         ]
                     elif any(keyword in preferences_lower for keyword in ['性價比', '預算', '經濟', '入門']):
                         fallback_recommendations = [
