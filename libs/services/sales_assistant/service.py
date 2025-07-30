@@ -6,8 +6,10 @@ from ...RAG.DB.MilvusQuery import MilvusQuery
 from ...RAG.DB.DuckDBQuery import DuckDBQuery
 from ...RAG.LLM.LLMInitializer import LLMInitializer
 from .multichat import MultichatManager, ChatTemplateManager
+from .multichat.funnel_manager import FunnelConversationManager, FunnelQueryType, FunnelFlowType
 import logging
 import re
+from typing import Dict, Any
 
 # 設定日誌
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -103,6 +105,9 @@ class SalesAssistantService(BaseService):
         # 初始化多輪對話管理器
         self.multichat_manager = MultichatManager()
         self.chat_template_manager = ChatTemplateManager()
+        
+        # 初始化漏斗對話管理器
+        self.funnel_manager = FunnelConversationManager()
         
         # ★ 修正點 1：修正 spec_fields 列表，使其與 .xlsx 檔案的標題列完全一致
         self.spec_fields = [
@@ -1093,7 +1098,35 @@ class SalesAssistantService(BaseService):
                 yield f"data: {json.dumps(list_response, ensure_ascii=False)}\n\n"
                 return
             
-            # 步驟1：檢查是否應該啟動多輪對話導引（最高優先級）
+            # 步驟1：檢查是否應該啟動漏斗對話（最高優先級）
+            should_trigger_funnel, funnel_query_type = self.funnel_manager.should_trigger_funnel(query)
+            
+            if should_trigger_funnel:
+                logging.info(f"檢測到漏斗對話觸發條件，查詢類型: {funnel_query_type.value}")
+                try:
+                    session_id, funnel_question = self.funnel_manager.start_funnel_session(query)
+                    
+                    # 格式化漏斗問題回應
+                    funnel_response = {
+                        "type": "funnel_question",
+                        "session_id": session_id,
+                        "question": {
+                            "question_id": funnel_question.question_id,
+                            "question_text": funnel_question.question_text,
+                            "options": funnel_question.options
+                        },
+                        "context": funnel_question.context,
+                        "message": "請選擇最符合您需求的選項，我將為您提供更精準的協助。"
+                    }
+                    
+                    yield f"data: {json.dumps(funnel_response, ensure_ascii=False)}\n\n"
+                    return
+                    
+                except Exception as e:
+                    logging.error(f"啟動漏斗對話失敗: {e}")
+                    # 如果漏斗對話啟動失敗，繼續檢查傳統的多輪對話
+            
+            # 步驟2：檢查是否應該啟動傳統多輪對話導引
             should_start_multichat, detected_scenario = self.multichat_manager.should_activate_multichat(query)
             
             # 擴展商務和筆電相關的觸發條件
@@ -2326,6 +2359,210 @@ Focus your analysis on the specific intent and target models identified above.
         except Exception as e:
             logging.error(f"處理多輪對話回應失敗: {e}")
             return {"error": f"處理失敗: {str(e)}"}
+    
+    async def process_funnel_response(self, session_id: str, choice_id: str) -> Dict[str, Any]:
+        """
+        處理漏斗對話回應
+        
+        Args:
+            session_id: 漏斗會話ID
+            choice_id: 使用者選擇的選項ID
+            
+        Returns:
+            處理結果
+        """
+        try:
+            logging.info(f"處理漏斗回應: session_id={session_id}, choice_id={choice_id}")
+            
+            # 處理使用者選擇
+            funnel_result = self.funnel_manager.process_funnel_choice(session_id, choice_id)
+            
+            if "error" in funnel_result:
+                return {"error": funnel_result["error"]}
+            
+            # 根據選擇的流程類型執行相應的處理
+            if funnel_result["action"] == "route_to_flow":
+                target_flow = FunnelFlowType(funnel_result["target_flow"])
+                original_query = funnel_result["original_query"]
+                user_choice = funnel_result["user_choice"]
+                
+                logging.info(f"路由到專業流程: {target_flow.value}")
+                
+                if target_flow == FunnelFlowType.SERIES_COMPARISON_FLOW:
+                    # 系列比較流程：直接執行比較
+                    return await self._execute_series_comparison_flow(original_query, user_choice)
+                    
+                elif target_flow == FunnelFlowType.PURPOSE_RECOMMENDATION_FLOW:
+                    # 用途推薦流程：進入用途導向的多輪對話
+                    return await self._execute_purpose_recommendation_flow(original_query, user_choice)
+                    
+                else:
+                    return {"error": f"不支援的流程類型: {target_flow.value}"}
+            
+            return {"error": "未知的處理結果"}
+            
+        except Exception as e:
+            logging.error(f"處理漏斗回應失敗: {e}")
+            return {"error": f"處理失敗: {str(e)}"}
+    
+    async def _execute_series_comparison_flow(self, original_query: str, user_choice: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        執行系列比較流程
+        
+        Args:
+            original_query: 原始查詢
+            user_choice: 使用者選擇
+            
+        Returns:
+            比較結果
+        """
+        try:
+            logging.info(f"執行系列比較流程: {original_query}")
+            
+            # 解析查詢意圖，專注於系列比較
+            query_intent = self._parse_query_intent(original_query)
+            
+            # 如果沒有檢測到系列，嘗試從查詢中提取
+            if not query_intent["modeltypes"]:
+                import re
+                series_match = re.search(r'\b(819|839|958)\b', original_query)
+                if series_match:
+                    query_intent["modeltypes"] = [series_match.group(1)]
+                    query_intent["query_type"] = "model_type"
+            
+            # 獲取該系列的所有資料
+            if query_intent["modeltypes"]:
+                context_list_of_dicts, target_modelnames = self._get_data_by_query_type(query_intent)
+                
+                # 構建系列比較提示
+                series_comparison_prompt = f"""
+以下是{query_intent["modeltypes"]}系列的所有機型規格資料，請根據用戶的原始查詢進行詳細比較：
+
+用戶查詢：{original_query}
+重點：提供該系列內所有機型的詳細規格比較，突出各機型之間的主要差異。
+
+{self.prompt_template}
+"""
+                
+                # 調用LLM生成比較結果
+                response_str = self.llm.invoke(
+                    f"{series_comparison_prompt}\n\n筆電資料:\n{json.dumps(context_list_of_dicts, ensure_ascii=False, indent=2)}"
+                )
+                
+                # 解析並格式化回應
+                try:
+                    parsed_json = json.loads(response_str)
+                    formatted_response = self._format_response_with_beautiful_table(
+                        parsed_json.get("answer_summary", ""), 
+                        parsed_json.get("comparison_table", []), 
+                        target_modelnames
+                    )
+                    
+                    # 添加流程識別資訊
+                    formatted_response["flow_type"] = "series_comparison"
+                    formatted_response["series"] = query_intent["modeltypes"]
+                    
+                    return {
+                        "type": "series_comparison_complete",
+                        "content": formatted_response,
+                        "original_query": original_query,
+                        "series_info": {
+                            "series": query_intent["modeltypes"],
+                            "models_count": len(target_modelnames),
+                            "models": target_modelnames
+                        }
+                    }
+                    
+                except json.JSONDecodeError:
+                    # 如果JSON解析失敗，使用備用格式
+                    return {
+                        "type": "series_comparison_complete",
+                        "content": {
+                            "answer_summary": response_str,
+                            "comparison_table": []
+                        },
+                        "original_query": original_query,
+                        "series_info": {
+                            "series": query_intent["modeltypes"],
+                            "models_count": len(target_modelnames),
+                            "models": target_modelnames
+                        }
+                    }
+            
+            else:
+                return {"error": "無法識別要比較的系列"}
+                
+        except Exception as e:
+            logging.error(f"執行系列比較流程失敗: {e}")
+            return {"error": f"系列比較失敗: {str(e)}"}
+    
+    async def _execute_purpose_recommendation_flow(self, original_query: str, user_choice: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        執行用途推薦流程
+        
+        Args:
+            original_query: 原始查詢
+            user_choice: 使用者選擇
+            
+        Returns:
+            推薦流程啟動結果
+        """
+        try:
+            logging.info(f"執行用途推薦流程: {original_query}")
+            
+            # 從原始查詢中識別用途場景
+            purpose_scenario = self._identify_purpose_scenario(original_query)
+            
+            # 啟動用途導向的多輪對話
+            all_questions_response = self.get_all_questions(original_query, scenario=purpose_scenario)
+            
+            # 添加流程識別資訊
+            all_questions_response["flow_type"] = "purpose_recommendation"
+            all_questions_response["purpose_scenario"] = purpose_scenario
+            all_questions_response["original_choice"] = user_choice
+            
+            return {
+                "type": "purpose_recommendation_start",
+                "content": all_questions_response,
+                "original_query": original_query,
+                "purpose_info": {
+                    "scenario": purpose_scenario,
+                    "flow_description": "根據您的用途需求，請回答以下問題以獲得個性化推薦"
+                }
+            }
+            
+        except Exception as e:
+            logging.error(f"執行用途推薦流程失敗: {e}")
+            return {"error": f"用途推薦流程啟動失敗: {str(e)}"}
+    
+    def _identify_purpose_scenario(self, query: str) -> str:
+        """
+        從查詢中識別用途場景
+        
+        Args:
+            query: 使用者查詢
+            
+        Returns:
+            場景類型
+        """
+        query_lower = query.lower()
+        
+        # 場景關鍵字映射
+        scenario_keywords = {
+            "gaming": ["遊戲", "gaming", "電競", "遊戲用", "玩遊戲", "game", "fps", "moba"],
+            "business": ["商務", "辦公", "工作", "企業", "商用", "業務", "職場", "公司", "文書處理"],
+            "creation": ["創作", "設計", "繪圖", "影片編輯", "剪輯", "photoshop", "3d建模"],
+            "study": ["學習", "學生", "讀書", "課業", "上課", "study", "student", "教育"]
+        }
+        
+        # 檢查各個場景的關鍵字
+        for scenario, keywords in scenario_keywords.items():
+            if any(keyword in query_lower for keyword in keywords):
+                logging.info(f"識別用途場景: {scenario}")
+                return scenario
+        
+        # 預設場景
+        return "general"
     
     def _build_query_intent_from_multichat(self, multichat_result: dict) -> dict:
         """從多輪對話結果構建查詢意圖"""

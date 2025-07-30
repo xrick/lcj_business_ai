@@ -141,16 +141,21 @@ class MultichatManager:
             else:
                 detected_scenario = "general"
             
+            # 優先檢查比較查詢關鍵字（避免被模糊查詢攔截）
+            for keyword in comparison_keywords:
+                if keyword in query_lower:
+                    # 檢查是否為具體系列比較（如819系列、958系列等）
+                    if self._is_series_comparison(query):
+                        logging.info(f"檢測到系列比較查詢，應直接執行比較: {keyword}")
+                        return False, None  # 不觸發多輪對話，直接執行比較
+                    elif not self._has_specific_models(query):
+                        logging.info(f"檢測到模糊比較查詢: {keyword}, 場景類型: {detected_scenario}")
+                        return True, detected_scenario
+            
             # 檢查模糊查詢關鍵字
             for keyword in vague_keywords:
                 if keyword in query_lower:
                     logging.info(f"檢測到模糊查詢關鍵字: {keyword}, 場景類型: {detected_scenario}")
-                    return True, detected_scenario
-            
-            # 檢查比較查詢關鍵字（某些情況下也需要引導）
-            for keyword in comparison_keywords:
-                if keyword in query_lower and not self._has_specific_models(query):
-                    logging.info(f"檢測到模糊比較查詢: {keyword}, 場景類型: {detected_scenario}")
                     return True, detected_scenario
             
             # 檢查是否包含使用場景描述但沒有具體機型
@@ -166,12 +171,84 @@ class MultichatManager:
             return False, None
     
     def _has_specific_models(self, query: str) -> bool:
-        """檢查查詢是否包含具體的機型"""
-        # 這裡可以擴展檢查邏輯，判斷是否提到具體機型
-        model_patterns = [r'\d{3}', r'[A-Z]{2,3}\d{3}', r'i[3579]', r'Ryzen']
-        for pattern in model_patterns:
-            if re.search(pattern, query):
+        """檢查查詢是否包含具體的機型（而非系列）"""
+        # 具體機型模式：完整的機型名稱，如 AG958, APX958, NB819-A 等
+        # 排除純系列號碼（819, 839, 958）的匹配
+        specific_model_patterns = [
+            r'[A-Z]{2,3}\d{3}',  # 如 AG958, APX958, NB819 等
+            r'i[3579]-\d+',      # 如 i7-1234 等具體CPU型號
+            r'Ryzen\s+[579]\s+\d+',  # 如 Ryzen 7 5800H 等具體CPU型號
+        ]
+        
+        # 檢查是否包含具體機型名稱
+        for pattern in specific_model_patterns:
+            if re.search(pattern, query, re.IGNORECASE):
+                logging.info(f"檢測到具體機型模式: {pattern}")
                 return True
+        
+        # 檢查是否包含常見的機型名稱關鍵字組合
+        # 例如：「AG958 和 APX958 的比較」這類具體機型比較
+        model_mention_patterns = [
+            r'[A-Z]{1,3}\d{3}[A-Z]*[-\s]*[A-Z]*\d*',  # 完整機型名稱
+        ]
+        
+        for pattern in model_mention_patterns:
+            matches = re.findall(pattern, query, re.IGNORECASE)
+            if matches and len(matches) >= 1:  # 至少提到一個具體機型
+                # 驗證是否為有效的機型名稱格式（不只是系列號碼）
+                valid_models = [m for m in matches if len(m) > 3 and not re.match(r'^\d{3}$', m)]
+                if valid_models:
+                    logging.info(f"檢測到具體機型名稱: {valid_models}")
+                    return True
+        
+        logging.info("未檢測到具體機型，判定為系列或模糊查詢")
+        return False
+    
+    def _is_series_comparison(self, query: str) -> bool:
+        """檢查是否為系列比較查詢（如819系列、958系列等）"""
+        # 明確的系列比較模式：直接要求比較特定系列的機型
+        definitive_series_comparison_patterns = [
+            r'比較\s*(819|839|958)\s*系列',      # 比較819系列
+            r'(819|839|958)\s*系列.*比較.*規格',  # 819系列比較規格
+            r'(819|839|958)\s*系列.*比較.*性能',  # 819系列比較性能
+            r'(819|839|958)\s*系列.*比較.*差異',  # 819系列比較差異
+            r'(819|839|958)\s*系列.*比較.*不同',  # 819系列比較不同
+            r'(819|839|958)\s*系列.*有什麼不同',  # 819系列有什麼不同
+            r'(819|839|958)\s*系列.*差異',       # 819系列差異
+            r'(819|839|958)\s*系列.*顯示.*比較', # 819系列顯示比較
+            r'(819|839|958)\s*系列.*螢幕.*比較', # 819系列螢幕比較
+        ]
+        
+        for pattern in definitive_series_comparison_patterns:
+            if re.search(pattern, query, re.IGNORECASE):
+                logging.info(f"檢測到明確系列比較模式: {pattern}")
+                return True
+        
+        # 排除模糊詢問類型的查詢（如"有哪些"、"可以"等）
+        ambiguous_question_patterns = [
+            r'有哪些.*比較',     # 有哪些...比較
+            r'可以.*比較',       # 可以...比較
+            r'能夠.*比較',       # 能夠...比較
+            r'比較.*哪些',       # 比較...哪些
+        ]
+        
+        for pattern in ambiguous_question_patterns:
+            if re.search(pattern, query, re.IGNORECASE):
+                logging.info(f"檢測到模糊詢問模式，不視為系列比較: {pattern}")
+                return False
+        
+        # 額外檢查：嚴格的數字系列+比較關鍵字組合（排除模糊詢問）
+        if re.search(r'\b(819|839|958)\b', query):
+            comparison_keywords = ["比較", "差別", "不同", "差異"]
+            for keyword in comparison_keywords:
+                if keyword in query.lower():
+                    # 確認不包含具體機型名稱且不是模糊詢問
+                    if not self._has_specific_models(query) and not any(
+                        ambiguous in query for ambiguous in ["哪些", "可以", "能夠", "有什麼"]
+                    ):
+                        logging.info("檢測到嚴格的數字系列+比較關鍵字組合")
+                        return True
+        
         return False
     
     def start_multichat_flow(self, query: str, user_context: Dict = None, strategy: str = "random") -> Tuple[str, ChatQuestion]:
