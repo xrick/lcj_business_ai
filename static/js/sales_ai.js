@@ -467,25 +467,53 @@ function initSalesAI() {
     }
     
     function renderSeriesComparisonResult(container, content) {
-        console.log("📊 [renderSeriesComparisonResult] 渲染系列比較結果", content);
+        console.log('🔍 [renderSeriesComparisonResult] 開始渲染系列比較結果:', content);
         
-        let html = `
-            <div class="series-comparison-result">
-                <h3>🔍 系列規格比較結果</h3>
-                <p class="comparison-summary">${content.summary || '以下是詳細的規格比較：'}</p>
-                
-                <div class="comparison-content">
-                    ${renderMarkdownContent(content.comparison_table || content.detailed_comparison)}
-                </div>
-                
-                <div class="action-buttons">
-                    <button class="restart-funnel-btn">🔄 重新分析需求</button>
+        const { summary, comparison_table, detailed_comparison, series_name, model_count, models } = content;
+        
+        console.log('📊 比較表格內容:', comparison_table);
+        console.log('📊 表格類型:', typeof comparison_table);
+        
+        // 確保表格內容是字串格式
+        let tableContent = comparison_table;
+        if (typeof tableContent !== 'string') {
+            tableContent = JSON.stringify(tableContent);
+        }
+        
+        // 檢查表格格式
+        if (!tableContent.includes('|')) {
+            console.warn('⚠️ 表格內容格式不正確，嘗試修復...');
+            tableContent = `| 機型 | 狀態 |\n| --- | --- |\n| ${models.join(' | ')} | 資料格式錯誤 |`;
+        }
+        
+        const html = `
+            <div class="message-container">
+                <div class="message-card">
+                    <div class="message-content">
+                        <h3>${summary || '系列比較結果'}</h3>
+                        <p>${detailed_comparison || ''}</p>
+                        
+                        <div class="table-container">
+                            <h4>規格比較表</h4>
+                            <div class="markdown-table">
+                                ${renderMarkdownContent(tableContent)}
+                            </div>
+                        </div>
+                        
+                        <div class="series-info">
+                            <p><strong>系列名稱:</strong> ${series_name || '未知'}</p>
+                            <p><strong>機型數量:</strong> ${model_count || 0}</p>
+                            <p><strong>包含機型:</strong> ${models ? models.join(', ') : '未知'}</p>
+                        </div>
+                        
+                        <button class="restart-funnel-btn" onclick="restartFunnel()">重新開始</button>
+                    </div>
                 </div>
             </div>
         `;
         
         container.innerHTML = html;
-        bindRestartButton(container);
+        console.log('✅ [renderSeriesComparisonResult] 渲染完成');
     }
     
     function renderPurposeRecommendationResult(container, content) {

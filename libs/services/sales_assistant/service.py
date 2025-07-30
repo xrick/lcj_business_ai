@@ -2635,10 +2635,16 @@ Focus your analysis on the specific intent and target models identified above.
             if not hasattr(self, 'duckdb_query') or not self.duckdb_query:
                 return "資料庫連接不可用"
             
-            # 獲取指定機型的基本規格
+            # 獲取指定機型的基本規格 - 選擇更簡潔的欄位
             placeholders = ",".join(["?"] * len(modelnames))
             query = f"""
-                SELECT modelname, cpu, gpu, memory, storage, lcd
+                SELECT 
+                    modelname,
+                    SUBSTRING(cpu, 1, 100) as cpu_short,
+                    SUBSTRING(gpu, 1, 100) as gpu_short,
+                    SUBSTRING(memory, 1, 50) as memory_short,
+                    SUBSTRING(storage, 1, 80) as storage_short,
+                    SUBSTRING(lcd, 1, 80) as lcd_short
                 FROM specs 
                 WHERE modelname IN ({placeholders})
                 ORDER BY modelname
@@ -2650,13 +2656,34 @@ Focus your analysis on the specific intent and target models identified above.
             if not result:
                 return "無法獲取機型規格資訊"
             
+            # 調試：查看查詢結果格式
+            logging.info(f"查詢結果格式: {len(result)} 行")
+            for i, row in enumerate(result):
+                logging.info(f"第 {i+1} 行: {row}")
+            
             # 生成表格
             headers = ["機型", "CPU", "GPU", "記憶體", "儲存", "螢幕"]
             markdown = "| " + " | ".join(headers) + " |\n"
             markdown += "|" + "|".join(["---"] * len(headers)) + "|\n"
             
             for row in result:
-                markdown += "| " + " | ".join([str(item) if item else "N/A" for item in row]) + " |\n"
+                # 處理每個欄位的文本，確保正確換行和格式
+                formatted_row = []
+                for i, item in enumerate(row):
+                    if item is None:
+                        formatted_row.append("N/A")
+                    else:
+                        # 將長文本進行適當的換行處理
+                        text = str(item).strip()
+                        # 移除多餘的空白字符
+                        text = ' '.join(text.split())
+                        # 對於長文本，在適當位置添加換行
+                        if len(text) > 40:
+                            # 在句號或逗號後添加換行
+                            text = text.replace('. ', '.<br>').replace(', ', ',<br>')
+                        formatted_row.append(text)
+                
+                markdown += "| " + " | ".join(formatted_row) + " |\n"
             
             return markdown
             
