@@ -560,17 +560,37 @@ function initSalesAI() {
             }
             
             const result = await response.json();
-            console.log('漏斗選擇 API 回應:', result);
+            console.log('📨 漏斗選擇 API 回應:', result);
+            console.log('📊 回應類型:', result.type);
+            console.log('📊 完整回應內容:', JSON.stringify(result, null, 2));
             
             if (result.type === 'funnel_complete') {
+                console.log('✅ 檢測到 funnel_complete，準備渲染完成頁面');
                 const container = document.querySelector('.funnel-container').parentElement;
                 renderFunnelComplete(container, result);
+            } else if (result.type === 'series_comparison_result') {
+                console.log('✅ 檢測到 series_comparison_result，準備渲染系列比較結果');
+                const container = document.querySelector('.funnel-container').parentElement;
+                renderSeriesComparisonResult(container, result);
+            } else if (result.type === 'purpose_recommendation_result') {
+                console.log('✅ 檢測到 purpose_recommendation_result，準備渲染用途推薦結果');
+                const container = document.querySelector('.funnel-container').parentElement;
+                renderPurposeRecommendationResult(container, result);
             } else if (result.type === 'error') {
-                alert(`處理錯誤: ${result.message}`);
+                console.error('❌ API 返回錯誤:', result.error);
+                alert(`處理錯誤: ${result.error}`);
+            } else {
+                console.warn('⚠️ 未知的回應類型:', result.type);
+                console.log('📊 完整回應:', result);
+                // 嘗試渲染任何可能的內容
+                const container = document.querySelector('.funnel-container').parentElement;
+                if (container) {
+                    container.innerHTML = `<p>收到回應但格式不支援: ${JSON.stringify(result)}</p>`;
+                }
             }
             
         } catch (error) {
-            console.error('漏斗選擇 API 錯誤:', error);
+            console.error('❌ 漏斗選擇 API 錯誤:', error);
             alert(`處理錯誤: ${error.message}`);
         }
     }

@@ -1236,7 +1236,7 @@ class SalesAssistantService(BaseService):
 [QUERY INTENT ANALYSIS]
 Based on the query intent analysis:
 - Query Type: {query_intent['query_type']}
-- Intent: {query_intent['intent']}
+- Intent: {query_intent['intent']} 
 - Target Models: {', '.join(target_modelnames)}
 
 Focus your analysis on the specific intent and target models identified above.
@@ -2552,42 +2552,17 @@ Focus your analysis on the specific intent and target models identified above.
                         "error": f"找不到 {series_name} 系列的機型資料"
                     }
                 
-                # 構建系列比較的專用提示
-                series_comparison_prompt = f"""
-請為 {series_name} 系列的所有機型進行詳細規格比較分析。
-
-要求：
-1. 重點突出各機型之間的關鍵差異
-2. 提供清晰的比較表格
-3. 針對不同使用場景給出建議
-4. 使用 Markdown 表格格式
-
-{self.prompt_template}
-"""
+                # 直接生成 Markdown 表格，避免複雜的 LLM 調用
+                markdown_table = self._generate_basic_specs_table(target_modelnames)
                 
-                # 調用 LLM 進行系列比較
-                response_str = await self.llm.ainvoke(
-                    f"{series_comparison_prompt}\n\n使用者查詢: {original_query}\n\n{series_name} 系列機型資料:\n{json.dumps(context_list_of_dicts, ensure_ascii=False, indent=2)}"
-                )
-                
-                # 解析回應並格式化
-                try:
-                    parsed_response = json.loads(response_str)
-                    answer_summary = parsed_response.get("answer_summary", response_str)
-                    comparison_table = parsed_response.get("comparison_table", [])
-                except json.JSONDecodeError:
-                    # 如果無法解析 JSON，使用原始回應
-                    answer_summary = response_str
-                    comparison_table = []
-                
-                # 生成 Markdown 表格
-                markdown_table = self._generate_markdown_table(comparison_table, target_modelnames)
+                # 生成簡單的總結
+                summary = f"以下是 {series_name} 系列共 {len(target_modelnames)} 個機型的詳細規格比較："
                 
                 return {
                     "type": "series_comparison_result",
-                    "summary": f"以下是 {series_name} 系列的詳細規格比較：",
+                    "summary": summary,
                     "comparison_table": markdown_table,
-                    "detailed_comparison": answer_summary,
+                    "detailed_comparison": f"已為您比較 {series_name} 系列的所有機型規格。",
                     "series_name": series_name,
                     "model_count": len(target_modelnames),
                     "models": target_modelnames
@@ -2656,11 +2631,9 @@ Focus your analysis on the specific intent and target models identified above.
             基本規格表格的 Markdown 字串
         """
         try:
-            # 從資料庫獲取基本規格資訊
-            from config import DB_PATH
-            import duckdb
-            
-            conn = duckdb.connect(str(DB_PATH))
+            # 使用現有的 duckdb_query 實例，避免連接衝突
+            if not hasattr(self, 'duckdb_query') or not self.duckdb_query:
+                return "資料庫連接不可用"
             
             # 獲取指定機型的基本規格
             placeholders = ",".join(["?"] * len(modelnames))
@@ -2671,8 +2644,8 @@ Focus your analysis on the specific intent and target models identified above.
                 ORDER BY modelname
             """
             
-            result = conn.execute(query, modelnames).fetchall()
-            conn.close()
+            # 使用現有的 duckdb_query 執行查詢
+            result = self.duckdb_query.query_with_params(query, modelnames)
             
             if not result:
                 return "無法獲取機型規格資訊"
@@ -2689,7 +2662,8 @@ Focus your analysis on the specific intent and target models identified above.
             
         except Exception as e:
             logging.error(f"生成基本規格表格失敗: {e}")
-            return "基本規格表格生成失敗"
+            # 返回一個簡單的錯誤表格
+            return f"| 機型 | 狀態 |\n| --- | --- |\n| {' | '.join(modelnames)} | 資料載入失敗 |"
     
     async def _execute_purpose_recommendation_flow(self, original_query: str, user_choice: Dict[str, Any]) -> Dict[str, Any]:
         """
