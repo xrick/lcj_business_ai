@@ -161,3 +161,96 @@ async def multichat_all_questions(request: Request):
     except Exception as e:
         logging.error(f"Error in multichat-all: {e}")
         return JSONResponse(status_code=500, content={"error": "Internal Server Error"})
+
+@router.post("/funnel-choice")
+async def funnel_choice(request: Request):
+    """處理 Funnel Conversation 的選項選擇"""
+    if not service_manager:
+        return JSONResponse(status_code=500, content={"error": "Service manager not available"})
+    
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        choice_id = data.get("choice_id")
+        service_name = data.get("service_name", "sales_assistant")
+
+        if not session_id or not choice_id:
+            return JSONResponse(status_code=400, content={"error": "session_id and choice_id are required"})
+
+        service = service_manager.get_service(service_name)
+        if not service:
+            return JSONResponse(status_code=404, content={"error": f"Service '{service_name}' not found"})
+
+        # 檢查服務是否支援 Funnel Conversation
+        if not hasattr(service, 'process_funnel_choice'):
+            return JSONResponse(status_code=400, content={"error": "Service does not support funnel conversation"})
+
+        # 處理 Funnel 選項選擇
+        result = await service.process_funnel_choice(session_id, choice_id)
+        return result
+
+    except Exception as e:
+        logging.error(f"Error in funnel-choice: {e}")
+        return JSONResponse(status_code=500, content={"error": "Internal Server Error"})
+
+@router.post("/specialized-flow")
+async def specialized_flow(request: Request):
+    """執行專業化流程（系列比較或用途推薦）"""
+    if not service_manager:
+        return JSONResponse(status_code=500, content={"error": "Service manager not available"})
+    
+    try:
+        data = await request.json()
+        flow_type = data.get("flow_type")
+        original_query = data.get("original_query")
+        user_choice = data.get("user_choice")
+        service_name = data.get("service_name", "sales_assistant")
+
+        if not flow_type or not original_query or not user_choice:
+            return JSONResponse(status_code=400, content={"error": "flow_type, original_query, and user_choice are required"})
+
+        service = service_manager.get_service(service_name)
+        if not service:
+            return JSONResponse(status_code=404, content={"error": f"Service '{service_name}' not found"})
+
+        # 檢查服務是否支援專業化流程
+        if not hasattr(service, 'execute_specialized_flow'):
+            return JSONResponse(status_code=400, content={"error": "Service does not support specialized flows"})
+
+        # 執行專業化流程
+        result = await service.execute_specialized_flow(flow_type, original_query, user_choice)
+        return result
+
+    except Exception as e:
+        logging.error(f"Error in specialized-flow: {e}")
+        return JSONResponse(status_code=500, content={"error": "Internal Server Error"})
+
+@router.post("/funnel-question")
+async def funnel_question(request: Request):
+    """獲取 Funnel Conversation 的問題"""
+    if not service_manager:
+        return JSONResponse(status_code=500, content={"error": "Service manager not available"})
+    
+    try:
+        data = await request.json()
+        query = data.get("query")
+        service_name = data.get("service_name", "sales_assistant")
+
+        if not query:
+            return JSONResponse(status_code=400, content={"error": "query is required"})
+
+        service = service_manager.get_service(service_name)
+        if not service:
+            return JSONResponse(status_code=404, content={"error": f"Service '{service_name}' not found"})
+
+        # 檢查服務是否支援 Funnel Conversation
+        if not hasattr(service, 'get_funnel_question'):
+            return JSONResponse(status_code=400, content={"error": "Service does not support funnel questions"})
+
+        # 獲取 Funnel 問題
+        result = await service.get_funnel_question(query)
+        return result
+
+    except Exception as e:
+        logging.error(f"Error in funnel-question: {e}")
+        return JSONResponse(status_code=500, content={"error": "Internal Server Error"})

@@ -339,6 +339,281 @@ function initSalesAI() {
         scrollToBottom();
     }
     
+    // ✨ 新增：Funnel Conversation 系統渲染函數
+    function renderFunnelStart(container, content) {
+        console.log("🚀 [renderFunnelStart] 開始執行，content:", content);
+        
+        let html = `
+            <div class="funnel-container">
+                <h3>🎯 智能需求分析</h3>
+                <p class="funnel-intro">${content.message || '為了更精準地幫助您，讓我先了解您的需求類型。'}</p>
+                
+                <div class="funnel-loading">
+                    <p class="loading-text">正在分析您的需求...</p>
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        
+        // 自動觸發漏斗問題
+        setTimeout(() => {
+            startFunnelQuestionMode(container);
+        }, 1000);
+        
+        console.log("🏁 [renderFunnelStart] 函數執行完成");
+    }
+    
+    function renderFunnelQuestion(container, content) {
+        console.log("📝 [renderFunnelQuestion] 開始渲染漏斗問題:", content);
+        console.log("📊 完整 content 物件:", JSON.stringify(content, null, 2));
+        
+        // 修正：從 content.question 中提取資料，而不是直接從 content
+        const { question, session_id, message } = content;
+        console.log("🔍 解構結果 - question:", question);
+        console.log("🔍 解構結果 - session_id:", session_id);
+        console.log("🔍 解構結果 - message:", message);
+        
+        if (!question) {
+            console.error("❌ question 物件不存在");
+            container.innerHTML = "<p style='color: red;'>錯誤：問題資料格式不正確</p>";
+            return;
+        }
+        
+        const { question_text, options } = question;
+        console.log("🔍 從 question 解構 - question_text:", question_text);
+        console.log("🔍 從 question 解構 - options:", options);
+        
+        if (!question_text || !options) {
+            console.error("❌ question_text 或 options 不存在");
+            container.innerHTML = "<p style='color: red;'>錯誤：問題文字或選項資料缺失</p>";
+            return;
+        }
+        
+        let html = `
+            <div class="funnel-container">
+                <h3>🎯 需求類型選擇</h3>
+                <p class="funnel-question">${question_text}</p>
+                ${message ? `<p class="funnel-message">${message}</p>` : ''}
+                
+                <div class="funnel-options">
+        `;
+        
+        options.forEach((option, index) => {
+            console.log(`🔍 處理選項 ${index}:`, option);
+            html += `
+                <button class="funnel-option-btn" data-option-id="${option.option_id}" data-session-id="${session_id}">
+                    <div class="option-header">
+                        <span class="option-icon">${option.label.split(' ')[0]}</span>
+                        <span class="option-title">${option.label.split(' ').slice(1).join(' ')}</span>
+                    </div>
+                    <div class="option-description">${option.description}</div>
+                </button>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+        
+        console.log("🔧 生成的 HTML:", html);
+        container.innerHTML = html;
+        
+        // 綁定選項點擊事件
+        const optionBtns = container.querySelectorAll('.funnel-option-btn');
+        console.log("🎛️ 找到選項按鈕數量:", optionBtns.length);
+        optionBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const optionId = btn.dataset.optionId;
+                const sessionId = btn.dataset.sessionId;
+                handleFunnelOptionSelected(optionId, sessionId);
+            });
+        });
+        
+        console.log("✅ [renderFunnelQuestion] 漏斗問題渲染完成");
+    }
+    
+    function renderFunnelComplete(container, content) {
+        console.log("✅ [renderFunnelComplete] 漏斗完成，準備路由到專業流程", content);
+        
+        const { target_flow, original_query, user_choice } = content;
+        
+        let html = `
+            <div class="funnel-complete">
+                <h3>✅ 需求分析完成</h3>
+                <p class="complete-message">已為您選擇「${user_choice.label}」流程，正在準備專業分析...</p>
+                
+                <div class="flow-info">
+                    <h4>📋 分析流程</h4>
+                    <p><strong>原始查詢：</strong>${original_query}</p>
+                    <p><strong>選擇流程：</strong>${target_flow}</p>
+                </div>
+                
+                <div class="loading-indicator">
+                    <div class="loading-spinner"></div>
+                    <p>正在執行專業分析...</p>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        
+        // 根據目標流程執行相應的專業分析
+        setTimeout(() => {
+            executeSpecializedFlow(target_flow, original_query, user_choice);
+        }, 1500);
+    }
+    
+    function renderSeriesComparisonResult(container, content) {
+        console.log("📊 [renderSeriesComparisonResult] 渲染系列比較結果", content);
+        
+        let html = `
+            <div class="series-comparison-result">
+                <h3>🔍 系列規格比較結果</h3>
+                <p class="comparison-summary">${content.summary || '以下是詳細的規格比較：'}</p>
+                
+                <div class="comparison-content">
+                    ${renderMarkdownContent(content.comparison_table || content.detailed_comparison)}
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="restart-funnel-btn">🔄 重新分析需求</button>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        bindRestartButton(container);
+    }
+    
+    function renderPurposeRecommendationResult(container, content) {
+        console.log("🎯 [renderPurposeRecommendationResult] 渲染用途推薦結果", content);
+        
+        let html = `
+            <div class="purpose-recommendation-result">
+                <h3>🎯 用途導向推薦結果</h3>
+                <p class="recommendation-summary">${content.summary || '根據您的需求，以下是推薦結果：'}</p>
+                
+                <div class="recommendation-content">
+                    ${renderMarkdownContent(content.recommendations || content.detailed_recommendations)}
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="restart-funnel-btn">🔄 重新分析需求</button>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        bindRestartButton(container);
+    }
+    
+    // Funnel 系統輔助函數
+    async function startFunnelQuestionMode(container) {
+        console.log("📋 啟動漏斗問題模式...");
+        
+        try {
+            const response = await fetch("/api/sales/funnel-question", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    query: "請幫我分析需求類型", 
+                    service_name: "sales_assistant" 
+                }),
+            });
+
+            if (!response.ok) throw new Error(`HTTP 錯誤！ 狀態: ${response.status}`);
+            
+            const result = await response.json();
+            console.log('📨 漏斗問題回應:', result);
+            
+            if (result.type === 'funnel_question') {
+                renderFunnelQuestion(container, result);
+            } else if (result.type === 'error') {
+                container.innerHTML = `<p style="color: red;">漏斗問題載入失敗: ${result.message}</p>`;
+            }
+            
+        } catch (error) {
+            console.error("啟動漏斗問題模式失敗:", error);
+            container.innerHTML = `<p style="color: red;">啟動失敗: ${error.message}</p>`;
+        }
+    }
+    
+    async function handleFunnelOptionSelected(optionId, sessionId) {
+        console.log(`用戶選擇了漏斗選項: ${optionId}, 會話: ${sessionId}`);
+        
+        try {
+            const response = await fetch('/api/sales/funnel-choice', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    choice_id: optionId,
+                    service_name: "sales_assistant"
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP錯誤！狀態: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log('漏斗選擇 API 回應:', result);
+            
+            if (result.type === 'funnel_complete') {
+                const container = document.querySelector('.funnel-container').parentElement;
+                renderFunnelComplete(container, result);
+            } else if (result.type === 'error') {
+                alert(`處理錯誤: ${result.message}`);
+            }
+            
+        } catch (error) {
+            console.error('漏斗選擇 API 錯誤:', error);
+            alert(`處理錯誤: ${error.message}`);
+        }
+    }
+    
+    async function executeSpecializedFlow(flowType, originalQuery, userChoice) {
+        console.log(`執行專業流程: ${flowType}`);
+        
+        try {
+            const response = await fetch('/api/sales/specialized-flow', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    flow_type: flowType,
+                    original_query: originalQuery,
+                    user_choice: userChoice,
+                    service_name: "sales_assistant"
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP錯誤！狀態: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log('專業流程 API 回應:', result);
+            
+            const container = document.querySelector('.funnel-complete').parentElement;
+            
+            if (result.type === 'series_comparison_result') {
+                renderSeriesComparisonResult(container, result);
+            } else if (result.type === 'purpose_recommendation_result') {
+                renderPurposeRecommendationResult(container, result);
+            } else if (result.type === 'error') {
+                container.innerHTML = `<p style="color: red;">專業流程執行失敗: ${result.message}</p>`;
+            }
+            
+        } catch (error) {
+            console.error('專業流程 API 錯誤:', error);
+            const container = document.querySelector('.funnel-complete').parentElement;
+            container.innerHTML = `<p style="color: red;">執行失敗: ${error.message}</p>`;
+        }
+    }
+    
     // ✨ MultiChat 渲染函數（必須在 renderMessageContent 之前定義）
     function renderMultiChatStart(container, content) {
         console.log("🚀 [renderMultiChatStart] 開始執行，content:", content);
@@ -709,16 +984,21 @@ function initSalesAI() {
     }
     
     function bindRestartButton(container) {
-        
-        // 綁定重新開始按鈕
-        const restartBtn = container.querySelector('.restart-multichat-btn');
-        if (restartBtn) {
+        // 綁定重新開始按鈕（支援多種類型）
+        const restartBtns = container.querySelectorAll('.restart-multichat-btn, .restart-funnel-btn');
+        restartBtns.forEach(restartBtn => {
             restartBtn.addEventListener('click', () => {
-                // 觸發新的 MultiChat 流程
-                userInput.value = "請幫我重新分析筆電需求";
+                // 根據按鈕類型決定重啟方式
+                if (restartBtn.classList.contains('restart-funnel-btn')) {
+                    // Funnel 系統重啟
+                    userInput.value = "請幫我重新分析需求類型";
+                } else {
+                    // 傳統 MultiChat 重啟
+                    userInput.value = "請幫我重新分析筆電需求";
+                }
                 sendMessage();
             });
-        }
+        });
     }
 
     // ✨ 新增：一次性問卷渲染函數
@@ -1074,6 +1354,49 @@ function initSalesAI() {
             }, 1000);
             return;
         }
+        
+        // ✨ 新增：處理 Funnel Conversation 系統
+        if (content.type === 'funnel_start') {
+            console.log("🔥 檢測到 funnel_start，啟動漏斗對話", content);
+            renderFunnelStart(container, content);
+            return;
+        }
+        
+        if (content.type === 'funnel_question') {
+            console.log("🔥 檢測到 funnel_question，渲染漏斗問題", content);
+            console.log("📊 funnel_question 詳細內容:", JSON.stringify(content, null, 2));
+            console.log("🔍 檢查 question 物件:", content.question);
+            console.log("🔍 檢查 session_id:", content.session_id);
+            console.log("🔍 檢查 message:", content.message);
+            
+            try {
+                renderFunnelQuestion(container, content);
+                console.log("✅ renderFunnelQuestion 執行完成");
+            } catch (error) {
+                console.error("❌ renderFunnelQuestion 執行失敗:", error);
+                container.innerHTML = `<p style="color: red;">漏斗問題渲染失敗: ${error.message}</p>`;
+            }
+            return;
+        }
+        
+        if (content.type === 'funnel_complete') {
+            console.log("🔥 檢測到 funnel_complete，處理漏斗完成", content);
+            renderFunnelComplete(container, content);
+            return;
+        }
+        
+        if (content.type === 'series_comparison_result') {
+            console.log("🔥 檢測到 series_comparison_result，渲染系列比較結果", content);
+            renderSeriesComparisonResult(container, content);
+            return;
+        }
+        
+        if (content.type === 'purpose_recommendation_result') {
+            console.log("🔥 檢測到 purpose_recommendation_result，渲染用途推薦結果", content);
+            renderPurposeRecommendationResult(container, content);
+            return;
+        }
+        
         if (content.type === 'multichat_all_questions') {
             console.log("🔥 檢測到 multichat_all_questions，準備渲染", content);
             if (typeof renderAllQuestionsForm === 'function') {

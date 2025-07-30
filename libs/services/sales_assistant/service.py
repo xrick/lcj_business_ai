@@ -2360,6 +2360,114 @@ Focus your analysis on the specific intent and target models identified above.
             logging.error(f"處理多輪對話回應失敗: {e}")
             return {"error": f"處理失敗: {str(e)}"}
     
+    async def process_funnel_choice(self, session_id: str, choice_id: str) -> Dict[str, Any]:
+        """
+        處理漏斗對話選項選擇（API 端點使用）
+        
+        Args:
+            session_id: 漏斗會話ID
+            choice_id: 使用者選擇的選項ID
+            
+        Returns:
+            處理結果
+        """
+        try:
+            logging.info(f"處理漏斗選項選擇: session_id={session_id}, choice_id={choice_id}")
+            
+            # 處理使用者選擇
+            funnel_result = self.funnel_manager.process_funnel_choice(session_id, choice_id)
+            
+            if "error" in funnel_result:
+                return {"error": funnel_result["error"]}
+            
+            # 根據選擇的流程類型執行相應的處理
+            if funnel_result["action"] == "route_to_flow":
+                target_flow = FunnelFlowType(funnel_result["target_flow"])
+                original_query = funnel_result["original_query"]
+                user_choice = funnel_result["user_choice"]
+                
+                logging.info(f"路由到專業流程: {target_flow.value}")
+                
+                if target_flow == FunnelFlowType.SERIES_COMPARISON_FLOW:
+                    # 系列比較流程：直接執行比較
+                    return await self._execute_series_comparison_flow(original_query, user_choice)
+                    
+                elif target_flow == FunnelFlowType.PURPOSE_RECOMMENDATION_FLOW:
+                    # 用途推薦流程：進入用途導向的多輪對話
+                    return await self._execute_purpose_recommendation_flow(original_query, user_choice)
+                    
+                else:
+                    return {"error": f"不支援的流程類型: {target_flow.value}"}
+            
+            return {"error": "未知的處理結果"}
+            
+        except Exception as e:
+            logging.error(f"處理漏斗選項選擇失敗: {e}")
+            return {"error": f"處理失敗: {str(e)}"}
+    
+    async def execute_specialized_flow(self, flow_type: str, original_query: str, user_choice: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        執行專業化流程（API 端點使用）
+        
+        Args:
+            flow_type: 流程類型
+            original_query: 原始查詢
+            user_choice: 使用者選擇
+            
+        Returns:
+            執行結果
+        """
+        try:
+            logging.info(f"執行專業化流程: flow_type={flow_type}, query={original_query}")
+            
+            if flow_type == "series_comparison_flow":
+                return await self._execute_series_comparison_flow(original_query, user_choice)
+            elif flow_type == "purpose_recommendation_flow":
+                return await self._execute_purpose_recommendation_flow(original_query, user_choice)
+            else:
+                return {"error": f"不支援的流程類型: {flow_type}"}
+                
+        except Exception as e:
+            logging.error(f"執行專業化流程失敗: {e}")
+            return {"error": f"執行失敗: {str(e)}"}
+    
+    async def get_funnel_question(self, query: str) -> Dict[str, Any]:
+        """
+        獲取 Funnel Conversation 問題（API 端點使用）
+        
+        Args:
+            query: 使用者查詢
+            
+        Returns:
+            Funnel 問題
+        """
+        try:
+            logging.info(f"獲取 Funnel 問題: {query}")
+            
+            # 檢查是否應該觸發漏斗對話
+            should_trigger_funnel, funnel_query_type = self.funnel_manager.should_trigger_funnel(query)
+            
+            if should_trigger_funnel:
+                session_id, funnel_question = self.funnel_manager.start_funnel_session(query)
+                
+                return {
+                    "type": "funnel_question",
+                    "session_id": session_id,
+                    "question": {
+                        "question_id": funnel_question.question_id,
+                        "question_text": funnel_question.question_text,
+                        "options": funnel_question.options
+                    },
+                    "context": funnel_question.context,
+                    "message": "請選擇最符合您需求的選項，我將為您提供更精準的協助。"
+                }
+            else:
+                return {"error": "此查詢不需要漏斗對話"}
+                
+        except Exception as e:
+            logging.error(f"獲取 Funnel 問題失敗: {e}")
+            return {"error": f"獲取問題失敗: {str(e)}"}
+    
     async def process_funnel_response(self, session_id: str, choice_id: str) -> Dict[str, Any]:
         """
         處理漏斗對話回應
@@ -2432,69 +2540,156 @@ Focus your analysis on the specific intent and target models identified above.
             
             # 獲取該系列的所有資料
             if query_intent["modeltypes"]:
+                series_name = query_intent["modeltypes"][0]
+                logging.info(f"比較系列: {series_name}")
+                
+                # 獲取該系列的所有機型資料
                 context_list_of_dicts, target_modelnames = self._get_data_by_query_type(query_intent)
                 
-                # 構建系列比較提示
+                if not context_list_of_dicts or not target_modelnames:
+                    return {
+                        "type": "series_comparison_result",
+                        "error": f"找不到 {series_name} 系列的機型資料"
+                    }
+                
+                # 構建系列比較的專用提示
                 series_comparison_prompt = f"""
-以下是{query_intent["modeltypes"]}系列的所有機型規格資料，請根據用戶的原始查詢進行詳細比較：
+請為 {series_name} 系列的所有機型進行詳細規格比較分析。
 
-用戶查詢：{original_query}
-重點：提供該系列內所有機型的詳細規格比較，突出各機型之間的主要差異。
+要求：
+1. 重點突出各機型之間的關鍵差異
+2. 提供清晰的比較表格
+3. 針對不同使用場景給出建議
+4. 使用 Markdown 表格格式
 
 {self.prompt_template}
 """
                 
-                # 調用LLM生成比較結果
-                response_str = self.llm.invoke(
-                    f"{series_comparison_prompt}\n\n筆電資料:\n{json.dumps(context_list_of_dicts, ensure_ascii=False, indent=2)}"
+                # 調用 LLM 進行系列比較
+                response_str = await self.llm.ainvoke(
+                    f"{series_comparison_prompt}\n\n使用者查詢: {original_query}\n\n{series_name} 系列機型資料:\n{json.dumps(context_list_of_dicts, ensure_ascii=False, indent=2)}"
                 )
                 
-                # 解析並格式化回應
+                # 解析回應並格式化
                 try:
-                    parsed_json = json.loads(response_str)
-                    formatted_response = self._format_response_with_beautiful_table(
-                        parsed_json.get("answer_summary", ""), 
-                        parsed_json.get("comparison_table", []), 
-                        target_modelnames
-                    )
-                    
-                    # 添加流程識別資訊
-                    formatted_response["flow_type"] = "series_comparison"
-                    formatted_response["series"] = query_intent["modeltypes"]
-                    
-                    return {
-                        "type": "series_comparison_complete",
-                        "content": formatted_response,
-                        "original_query": original_query,
-                        "series_info": {
-                            "series": query_intent["modeltypes"],
-                            "models_count": len(target_modelnames),
-                            "models": target_modelnames
-                        }
-                    }
-                    
+                    parsed_response = json.loads(response_str)
+                    answer_summary = parsed_response.get("answer_summary", response_str)
+                    comparison_table = parsed_response.get("comparison_table", [])
                 except json.JSONDecodeError:
-                    # 如果JSON解析失敗，使用備用格式
-                    return {
-                        "type": "series_comparison_complete",
-                        "content": {
-                            "answer_summary": response_str,
-                            "comparison_table": []
-                        },
-                        "original_query": original_query,
-                        "series_info": {
-                            "series": query_intent["modeltypes"],
-                            "models_count": len(target_modelnames),
-                            "models": target_modelnames
-                        }
-                    }
-            
+                    # 如果無法解析 JSON，使用原始回應
+                    answer_summary = response_str
+                    comparison_table = []
+                
+                # 生成 Markdown 表格
+                markdown_table = self._generate_markdown_table(comparison_table, target_modelnames)
+                
+                return {
+                    "type": "series_comparison_result",
+                    "summary": f"以下是 {series_name} 系列的詳細規格比較：",
+                    "comparison_table": markdown_table,
+                    "detailed_comparison": answer_summary,
+                    "series_name": series_name,
+                    "model_count": len(target_modelnames),
+                    "models": target_modelnames
+                }
+                
             else:
-                return {"error": "無法識別要比較的系列"}
+                return {
+                    "type": "series_comparison_result",
+                    "error": "無法識別要比較的系列"
+                }
                 
         except Exception as e:
             logging.error(f"執行系列比較流程失敗: {e}")
-            return {"error": f"系列比較失敗: {str(e)}"}
+            return {
+                "type": "series_comparison_result",
+                "error": f"系列比較失敗: {str(e)}"
+            }
+    
+    def _generate_markdown_table(self, comparison_data: list, modelnames: list) -> str:
+        """
+        生成 Markdown 格式的比較表格
+        
+        Args:
+            comparison_data: 比較資料
+            modelnames: 機型名稱列表
+            
+        Returns:
+            Markdown 表格字串
+        """
+        try:
+            if not comparison_data:
+                # 如果沒有比較資料，生成基本的規格表格
+                return self._generate_basic_specs_table(modelnames)
+            
+            # 生成 Markdown 表格
+            headers = ["規格項目"] + modelnames
+            markdown = "| " + " | ".join(headers) + " |\n"
+            markdown += "|" + "|".join(["---"] * len(headers)) + "|\n"
+            
+            for row in comparison_data:
+                if isinstance(row, dict):
+                    # 處理字典格式的資料
+                    feature = row.get("feature", "未知規格")
+                    values = [feature]
+                    for model in modelnames:
+                        values.append(str(row.get(model, "N/A")))
+                    markdown += "| " + " | ".join(values) + " |\n"
+                elif isinstance(row, list):
+                    # 處理列表格式的資料
+                    markdown += "| " + " | ".join([str(item) for item in row]) + " |\n"
+            
+            return markdown
+            
+        except Exception as e:
+            logging.error(f"生成 Markdown 表格失敗: {e}")
+            return "表格生成失敗"
+    
+    def _generate_basic_specs_table(self, modelnames: list) -> str:
+        """
+        生成基本的規格表格
+        
+        Args:
+            modelnames: 機型名稱列表
+            
+        Returns:
+            基本規格表格的 Markdown 字串
+        """
+        try:
+            # 從資料庫獲取基本規格資訊
+            from config import DB_PATH
+            import duckdb
+            
+            conn = duckdb.connect(str(DB_PATH))
+            
+            # 獲取指定機型的基本規格
+            placeholders = ",".join(["?"] * len(modelnames))
+            query = f"""
+                SELECT modelname, cpu, gpu, memory, storage, lcd
+                FROM specs 
+                WHERE modelname IN ({placeholders})
+                ORDER BY modelname
+            """
+            
+            result = conn.execute(query, modelnames).fetchall()
+            conn.close()
+            
+            if not result:
+                return "無法獲取機型規格資訊"
+            
+            # 生成表格
+            headers = ["機型", "CPU", "GPU", "記憶體", "儲存", "螢幕"]
+            markdown = "| " + " | ".join(headers) + " |\n"
+            markdown += "|" + "|".join(["---"] * len(headers)) + "|\n"
+            
+            for row in result:
+                markdown += "| " + " | ".join([str(item) if item else "N/A" for item in row]) + " |\n"
+            
+            return markdown
+            
+        except Exception as e:
+            logging.error(f"生成基本規格表格失敗: {e}")
+            return "基本規格表格生成失敗"
     
     async def _execute_purpose_recommendation_flow(self, original_query: str, user_choice: Dict[str, Any]) -> Dict[str, Any]:
         """
