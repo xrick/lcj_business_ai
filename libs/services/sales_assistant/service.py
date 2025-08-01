@@ -917,54 +917,277 @@ class SalesAssistantService(BaseService):
 
     def _parse_query_intent(self, query: str) -> dict:
         """
-        解析用户查询意图
-        返回包含modelname、modeltype、intent的字典
+        統一的查詢意圖解析入口點 - 使用LLM進行精確意圖偵測
         """
         try:
             logging.info(f"開始解析查詢意圖: {query}")
             
-            result = {
-                "modelnames": [],
-                "modeltypes": [],
-                "intent": "general",  # 默认意图
-                "query_type": "unknown"  # 查询类型
+            # 直接使用LLM進行意圖偵測
+            llm_intent = self._parse_query_intent_with_llm(query)
+            
+            # 轉換為現有系統相容的格式
+            compatible_result = {
+                "modelnames": llm_intent.get("modelnames", []),
+                "modeltypes": llm_intent.get("modeltypes", []),
+                "intent": llm_intent.get("primary_intent", "general"),
+                "query_type": llm_intent.get("query_type", "unknown"),
+                
+                # 新增欄位，提供更豐富的意圖資訊
+                "focus_areas": llm_intent.get("focus_areas", []),
+                "user_scenario": llm_intent.get("user_scenario", "general"),
+                "comparison_type": llm_intent.get("comparison_type", "none"),
+                "confidence": llm_intent.get("confidence", 0.0),
+                "reasoning": llm_intent.get("reasoning", ""),
+                "secondary_intents": llm_intent.get("secondary_intents", [])
             }
             
-            # 1. 检查是否包含modelname
-            contains_modelname, found_modelnames = self._check_query_contains_modelname(query)
-            if contains_modelname:
-                result["modelnames"] = found_modelnames
-                result["query_type"] = "specific_model"
-            
-            # 2. 检查是否包含modeltype
-            contains_modeltype, found_modeltypes = self._check_query_contains_modeltype(query)
-            if contains_modeltype:
-                result["modeltypes"] = found_modeltypes
-                if result["query_type"] == "unknown":
-                    result["query_type"] = "model_type"
-            
-            # 3. 解析查询意图 - 使用配置檔案中的關鍵字
-            query_lower = query.lower()
-            
-            # 使用配置檔案中的關鍵字來檢查意圖
-            for intent_name, intent_config in self.intent_keywords.items():
-                keywords = intent_config.get("keywords", [])
-                if any(keyword.lower() in query_lower for keyword in keywords):
-                    result["intent"] = intent_name
-                    logging.info(f"檢測到意圖 '{intent_name}': {intent_config.get('description', '')}")
-                    break
-            
-            logging.info(f"查詢意圖解析結果: {result}")
-            return result
+            logging.info(f"統一意圖解析結果: {compatible_result}")
+            return compatible_result
             
         except Exception as e:
             logging.error(f"解析查詢意圖時發生錯誤: {e}")
-            return {
-                "modelnames": [],
-                "modeltypes": [],
-                "intent": "general",
-                "query_type": "unknown"
-            }
+            # 使用降級處理
+            return self._parse_query_intent_fallback(query)
+
+    def _parse_query_intent_with_llm(self, query: str) -> dict:
+        """
+        使用LLM進行精確的意圖偵測
+        """
+        import time
+        start_time = time.time()
+        
+        try:
+            # 載入意圖偵測prompt
+            intent_prompt = self._load_prompt_template("libs/services/sales_assistant/prompts/intent_detection_prompt.txt")
+            
+            # 構建最終prompt
+            final_prompt = intent_prompt.replace("{query}", query)
+            
+            logging.info(f"執行LLM意圖偵測，查詢: {query}")
+            
+            # 調用LLM
+            response = self.llm_initializer.invoke(final_prompt)
+            
+            logging.info(f"LLM意圖偵測原始回應: {response}")
+            
+            # 解析JSON回應
+            intent_result = self._parse_intent_json_response(response)
+            
+            # 記錄成功指標
+            duration = time.time() - start_time
+            confidence = intent_result.get('confidence', 0)
+            logging.info(f"LLM意圖偵測成功，耗時: {duration:.2f}s，信心度: {confidence}")
+            
+            return intent_result
+            
+        except Exception as e:
+            # 記錄失敗指標
+            duration = time.time() - start_time
+            logging.error(f"LLM意圖偵測失敗，耗時: {duration:.2f}s，錯誤: {e}")
+            
+            # 降級到簡單關鍵字匹配
+            return self._parse_query_intent_fallback(query)
+
+    def _parse_intent_json_response(self, response: str) -> dict:
+        """
+        解析LLM返回的意圖JSON，提供多層次容錯處理
+        """
+        try:
+            # 提取JSON部分
+            json_start = response.find("{")
+            json_end = response.rfind("}")
+            
+            if json_start != -1 and json_end != -1:
+                json_content = response[json_start:json_end+1]
+                intent_data = json.loads(json_content)
+                
+                # 驗證必要欄位
+                required_fields = ["query_type", "primary_intent", "confidence"]
+                if all(field in intent_data for field in required_fields):
+                    # 數據清理和驗證
+                    validated_data = self._validate_intent_data(intent_data)
+                    return validated_data
+                    
+        except json.JSONDecodeError as e:
+            logging.error(f"JSON解析失敗: {e}")
+            # 嘗試修復常見JSON格式問題
+            fixed_json = self._fix_intent_json_format(response)
+            if fixed_json:
+                try:
+                    intent_data = json.loads(fixed_json)
+                    return self._validate_intent_data(intent_data)
+                except:
+                    pass
+        except Exception as e:
+            logging.error(f"意圖解析異常: {e}")
+        
+        # 返回默認結構
+        return self._get_default_intent_structure()
+
+    def _validate_intent_data(self, intent_data: dict) -> dict:
+        """
+        驗證和清理意圖數據，包含智能修正邏輯
+        """
+        # 處理可能的多選項字串格式錯誤
+        query_type = intent_data.get("query_type", "")
+        if "|" in str(query_type):
+            # 如果是 "model_type|specific_model|general|comparison" 格式，取第一個
+            query_type = query_type.split("|")[0].strip()
+            intent_data["query_type"] = query_type
+            logging.warning(f"修正多選項格式的query_type: {query_type}")
+        
+        # 智能修正query_type
+        valid_query_types = ["model_type", "specific_model"]  # 移除不支援的 "general" 和 "comparison"
+        
+        modeltypes = intent_data.get("modeltypes", [])
+        modelnames = intent_data.get("modelnames", [])
+        
+        # 智能判斷正確的query_type
+        if modelnames and any(mn in AVAILABLE_MODELNAMES for mn in modelnames):
+            # 如果有具體機型名稱，應該是specific_model
+            intent_data["query_type"] = "specific_model"
+            logging.info("根據modelnames自動修正query_type為specific_model")
+        elif modeltypes:
+            # 如果有機型系列，應該是model_type  
+            intent_data["query_type"] = "model_type"
+            logging.info("根據modeltypes自動修正query_type為model_type")
+        elif intent_data.get("query_type") not in valid_query_types:
+            # 如果沒有明確指標，默認為model_type（較通用）
+            intent_data["query_type"] = "model_type"
+            logging.info("使用默認query_type: model_type")
+        
+        # 驗證primary_intent
+        valid_intents = ["gaming", "business", "creation", "battery", "cpu", "gpu", 
+                        "display", "comparison", "specifications", "latest", "general"]
+        primary_intent = intent_data.get("primary_intent", "")
+        if "|" in str(primary_intent):
+            # 處理多選項格式錯誤
+            primary_intent = primary_intent.split("|")[0].strip()
+            intent_data["primary_intent"] = primary_intent
+            logging.warning(f"修正多選項格式的primary_intent: {primary_intent}")
+            
+        if intent_data.get("primary_intent") not in valid_intents:
+            intent_data["primary_intent"] = "general"
+        
+        # 驗證modeltypes - 使用實際資料庫中的機型系列
+        valid_modeltypes = ["531", "819", "839", "928", "958", "960", "AC01"]
+        modeltypes = intent_data.get("modeltypes", [])
+        intent_data["modeltypes"] = [mt for mt in modeltypes if mt in valid_modeltypes]
+        
+        # 驗證modelnames
+        modelnames = intent_data.get("modelnames", [])
+        intent_data["modelnames"] = [mn for mn in modelnames if mn in AVAILABLE_MODELNAMES]
+        
+        # 驗證confidence範圍
+        confidence = intent_data.get("confidence", 0.0)
+        try:
+            intent_data["confidence"] = max(0.0, min(1.0, float(confidence)))
+        except:
+            intent_data["confidence"] = 0.0
+        
+        # 確保必要欄位存在
+        intent_data.setdefault("secondary_intents", [])
+        intent_data.setdefault("focus_areas", [])
+        intent_data.setdefault("user_scenario", "general")
+        intent_data.setdefault("comparison_type", "none")
+        intent_data.setdefault("reasoning", "")
+        
+        return intent_data
+
+    def _fix_intent_json_format(self, response: str) -> str:
+        """
+        嘗試修復常見的JSON格式問題
+        """
+        try:
+            # 移除常見的非JSON內容
+            response = response.strip()
+            
+            # 尋找JSON區塊
+            json_start = response.find("{")
+            json_end = response.rfind("}")
+            
+            if json_start != -1 and json_end != -1:
+                json_content = response[json_start:json_end+1]
+                
+                # 修復常見問題
+                json_content = json_content.replace("'", '"')  # 單引號改雙引號
+                json_content = re.sub(r',\s*}', '}', json_content)  # 移除尾隨逗號
+                json_content = re.sub(r',\s*]', ']', json_content)  # 移除陣列尾隨逗號
+                
+                return json_content
+                
+        except Exception as e:
+            logging.error(f"修復JSON格式失敗: {e}")
+        
+        return ""
+
+    def _get_default_intent_structure(self) -> dict:
+        """
+        返回默認的意圖結構
+        """
+        return {
+            "query_type": "unknown",
+            "primary_intent": "general",
+            "secondary_intents": [],
+            "modeltypes": [],
+            "modelnames": [],
+            "focus_areas": [],
+            "user_scenario": "general",
+            "comparison_type": "none",
+            "confidence": 0.0,
+            "reasoning": "解析失敗，使用默認值"
+        }
+
+    def _parse_query_intent_fallback(self, query: str) -> dict:
+        """
+        LLM意圖偵測失敗時的降級處理
+        保持系統穩定性的簡化關鍵字匹配
+        """
+        try:
+            # 簡化的關鍵字匹配邏輯
+            result = self._get_default_intent_structure()
+            
+            # 基本機型系列檢測 - 使用實際資料庫中的系列
+            modeltypes = re.findall(r'\b(531|819|839|928|958|960)\b', query)
+            if "AC01" in query.upper():
+                modeltypes.append("AC01")
+            if modeltypes:
+                result["modeltypes"] = list(set(modeltypes))
+                result["query_type"] = "model_type"
+            
+            # 基本機型名稱檢測
+            query_upper = query.upper()
+            found_modelnames = [mn for mn in AVAILABLE_MODELNAMES if mn.upper() in query_upper]
+            if found_modelnames:
+                result["modelnames"] = found_modelnames
+                result["query_type"] = "specific_model"
+            
+            # 基本意圖檢測
+            if any(word in query for word in ["遊戲", "gaming", "電競", "玩遊戲", "適合遊戲"]):
+                result["primary_intent"] = "gaming"
+                result["user_scenario"] = "gaming"
+            elif any(word in query for word in ["電池", "續航", "battery", "電量"]):
+                result["primary_intent"] = "battery"
+                result["focus_areas"] = ["battery"]
+            elif any(word in query for word in ["比較", "compare", "差異", "不同"]):
+                result["primary_intent"] = "comparison"
+                if result["modeltypes"]:
+                    result["comparison_type"] = "series_comparison"
+                elif result["modelnames"]:
+                    result["comparison_type"] = "model_comparison"
+            elif any(word in query for word in ["辦公", "商務", "business", "office", "工作"]):
+                result["primary_intent"] = "business"
+                result["user_scenario"] = "office"
+            
+            result["confidence"] = 0.3  # 低信心度標記
+            result["reasoning"] = "LLM偵測失敗，使用簡化關鍵字匹配"
+            
+            logging.info(f"降級處理結果: {result}")
+            return result
+            
+        except Exception as e:
+            logging.error(f"降級處理也失敗: {e}")
+            return self._get_default_intent_structure()
 
     def _get_data_by_query_type(self, query_intent: dict) -> tuple[list, list]:
         """
