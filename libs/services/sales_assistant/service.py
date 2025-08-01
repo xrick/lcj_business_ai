@@ -2556,10 +2556,15 @@ Focus your analysis on the specific intent and target models identified above.
 
 有效機型名稱僅限：AG958, AG958P, AG958V, APX958, AHP958, AKK839, ARB839, AB819-S: FP6, AMD819-S: FT6, AMD819: FT6, APX819: FP7R2, APX839, AHP819: FP7R2, AHP839, ARB819-S: FP7R2
 
+重要提醒：
+- 必須使用上述有效機型名稱，不能自行編造或修改
+- 對於958系列遊戲查詢，優先推薦：AG958P, APX958, AHP958
+- 每個機型名稱必須在行首，後面接 " - "再接推薦原因
+
 正確範例：
-APX958 - 高性能處理器和顯卡配置，適合專業工作需求
-AG958P - 均衡的性能配置，適合日常辦公和學習
-AHP958 - 旗艦級配置，適合高端應用需求
+APX958 - 高效能遊戲筆電，搭載AMD Radeon顯卡，適合高畫質遊戲
+AG958P - 平衡型遊戲配置，兼具性能與便攜性
+AHP958 - 全方位高效能機型，適合遊戲和創作
 
 現在請直接提供推薦（只輸出機型和原因）：
 """
@@ -2595,26 +2600,51 @@ AHP958 - 旗艦級配置，適合高端應用需求
                             logging.warning(f"檢測到思考過程回應 (指標數: {thinking_count})，將使用fallback")
                             return ""
                     
-                    # 驗證是否包含有效的機型名稱
+                    # 改進的機型名稱驗證 - 提供更寬鬆的匹配
                     valid_models = [
                         'AG958', 'AG958P', 'AG958V', 'APX958', 'AHP958', 'AKK839', 'ARB839',
                         'AB819-S: FP6', 'AMD819-S: FT6', 'AMD819: FT6', 'APX819: FP7R2', 
                         'APX839', 'AHP819: FP7R2', 'AHP839', 'ARB819-S: FP7R2'
                     ]
                     
-                    found_valid_models = [model for model in valid_models if model in cleaned_response]
+                    # 嘗試多種匹配策略
+                    found_valid_models = []
+                    
+                    # 策略1: 直接匹配
+                    found_valid_models.extend([model for model in valid_models if model in cleaned_response])
+                    
+                    # 策略2: 去掉冠號和空格後匹配
+                    cleaned_for_match = cleaned_response.replace(':', '').replace(' ', '')
+                    for model in valid_models:
+                        model_clean = model.replace(':', '').replace(' ', '')
+                        if model_clean in cleaned_for_match and model not in found_valid_models:
+                            found_valid_models.append(model)
+                    
+                    # 策略3: 部分匹配（只匹配主要機型名稱）
+                    main_models = ['AG958', 'APX958', 'AHP958', 'AKK839', 'ARB839']
+                    for main_model in main_models:
+                        if main_model in cleaned_response and main_model not in found_valid_models:
+                            found_valid_models.append(main_model)
+                    
                     if not found_valid_models:
-                        logging.warning("回應中未發現有效機型名稱，將使用fallback")
+                        # 進一步檢查：是否包含958系列關鍵字
+                        if '958' in cleaned_response:
+                            logging.info("發現958系列關鍵字，將嘗試解析")
+                            return cleaned_response  # 繼續處理，讓後續的健壯解析系統處理
+                        
+                        logging.warning(f"回應中未發現有效機型名稱，原始回應: {cleaned_response[:100]}...")
                         return ""
                     
                     logging.info(f"驗證通過，發現有效機型: {found_valid_models}")
                     return cleaned_response
                 
-                # 驗證LLM回應
+                # 改進的LLM回應驗證和容錯處理
                 validated_response = validate_and_clean_response(response_str)
+                
                 if not validated_response:
-                    # 如果驗證失敗，直接觸發fallback
-                    raise ValueError("LLM回應驗證失敗")
+                    # 驗證失敗時，使用多層次fallback機制
+                    logging.warning("LLM回應驗證失敗，嘗試使用整合fallback系統")
+                    return self._handle_llm_validation_failure(enhanced_query, preferences_summary, db_filters)
                 
                 response_str = validated_response
                 
@@ -2687,7 +2717,6 @@ AHP958 - 旗艦級配置，適合高端應用需求
                     
                     # 智能fallback推薦策略
                     fallback_recommendations = []
-                    preferences_lower = preferences_text.lower()
                     
                     # 改進的智能推薦策略 - 支持複合需求檢測
                     fallback_recommendations = self._get_intelligent_fallback_recommendations(
@@ -3049,3 +3078,56 @@ AHP958 - 旗艦級配置，適合高端應用需求
         model_name = model_name.strip(' .,!?;:：。！？；，')
         
         return model_name
+    
+    def _handle_llm_validation_failure(self, enhanced_query: str, preferences_summary: dict, db_filters: dict) -> dict:
+        """
+        處理LLM回應驗證失敗的情況 - 使用多層次fallback機制
+        """
+        try:
+            logging.info("開始執行多層次fallback處理")
+            
+            # 構建偏好文本用於智能推薦
+            preferences_text = "\n".join([
+                f"{key}: {value}" for key, value in preferences_summary.items()
+            ])
+            
+            # 使用智能推薦系統
+            fallback_recommendations = self._get_intelligent_fallback_recommendations(
+                preferences_text, enhanced_query
+            )
+            
+            logging.info(f"智能推薦系統返回 {len(fallback_recommendations)} 個推薦")
+            
+            # 生成推薦表格
+            if fallback_recommendations:
+                fallback_table = self._generate_fallback_table(fallback_recommendations)
+                
+                return {
+                    "type": "multichat_complete", 
+                    "message": "根據您的需求偏好，我們為您推薦以下筆電：",
+                    "enhanced_query": enhanced_query,
+                    "preferences_summary": preferences_summary,
+                    "recommendations": fallback_table,
+                    "db_filters": db_filters,
+                    "is_table_format": True,
+                    "fallback_used": True  # 標記使用了fallback系統
+                }
+            else:
+                # 如果智能推薦也失敗，提供基本回應
+                return {
+                    "type": "multichat_complete",
+                    "message": "抱歉，目前無法為您提供具體的機型推薦。請嘗試調整您的需求或稍後重試。",
+                    "enhanced_query": enhanced_query,
+                    "preferences_summary": preferences_summary,
+                    "recommendations": "| 狀態 | 說明 |\n| --- | --- |\n| 系統忙碌 | 請稍後重試或聯繫客服 |",
+                    "db_filters": db_filters,
+                    "is_table_format": True,
+                    "fallback_used": True
+                }
+                
+        except Exception as e:
+            logging.error(f"多層次fallback處理也失敗: {e}")
+            return {
+                "type": "error",
+                "message": f"系統暫時無法處理您的請求，請稍後重試。錯誤詳情: {str(e)}"
+            }
