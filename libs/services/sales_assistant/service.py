@@ -1078,6 +1078,20 @@ class SalesAssistantService(BaseService):
         modelnames = intent_data.get("modelnames", [])
         intent_data["modelnames"] = [mn for mn in modelnames if mn in AVAILABLE_MODELNAMES]
         
+        # 處理user_scenario的多選項格式錯誤
+        user_scenario = intent_data.get("user_scenario", "general")
+        if "|" in str(user_scenario):
+            user_scenario = user_scenario.split("|")[0].strip()
+            intent_data["user_scenario"] = user_scenario
+            logging.warning(f"修正多選項格式的user_scenario: {user_scenario}")
+        
+        # 處理comparison_type的多選項格式錯誤
+        comparison_type = intent_data.get("comparison_type", "none")
+        if "|" in str(comparison_type):
+            comparison_type = comparison_type.split("|")[0].strip()
+            intent_data["comparison_type"] = comparison_type
+            logging.warning(f"修正多選項格式的comparison_type: {comparison_type}")
+        
         # 驗證confidence範圍
         confidence = intent_data.get("confidence", 0.0)
         try:
@@ -1092,6 +1106,7 @@ class SalesAssistantService(BaseService):
         intent_data.setdefault("comparison_type", "none")
         intent_data.setdefault("reasoning", "")
         
+        logging.info(f"驗證後的意圖數據: query_type={intent_data['query_type']}, primary_intent={intent_data['primary_intent']}")
         return intent_data
 
     def _fix_intent_json_format(self, response: str) -> str:
@@ -1263,7 +1278,22 @@ class SalesAssistantService(BaseService):
                 return context_list_of_dicts, target_modelnames
                 
             else:
-                raise ValueError(f"不支持的查询类型: {query_type}")
+                # 容錯處理：智能判斷正確的查詢類型
+                logging.warning(f"收到不支援的查詢類型 '{query_type}'，嘗試智能判斷")
+                
+                if modelnames:
+                    # 如果有具體機型名稱，當作specific_model處理
+                    logging.info("發現modelnames，將query_type修正為specific_model")
+                    query_intent["query_type"] = "specific_model"
+                    return self._get_data_by_query_type(query_intent)
+                elif modeltypes:
+                    # 如果有機型系列，當作model_type處理
+                    logging.info("發現modeltypes，將query_type修正為model_type")
+                    query_intent["query_type"] = "model_type"
+                    return self._get_data_by_query_type(query_intent)
+                else:
+                    # 如果都沒有，拋出錯誤
+                    raise ValueError(f"不支持的查询类型且缺少必要的型號資訊: {query_type}")
                 
         except Exception as e:
             logging.error(f"获取数据时发生错误: {e}")
