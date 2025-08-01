@@ -10,7 +10,8 @@
         "lcd",
         "面板"
       ],
-      "description": "螢幕相關查詢"
+      "description": "螢幕相關查詢",
+      "weight": 1.0
     },
     "cpu": {
       "keywords": [
@@ -20,7 +21,8 @@
         "processor",
         "ryzen"
       ],
-      "description": "CPU相關查詢"
+      "description": "CPU相關查詢",
+      "weight": 1.0
     },
     "gpu": {
       "keywords": [
@@ -30,7 +32,8 @@
         "graphics",
         "radeon"
       ],
-      "description": "GPU相關查詢"
+      "description": "GPU相關查詢",
+      "weight": 1.2
     },
     "memory": {
       "keywords": [
@@ -41,7 +44,8 @@
         "ram",
         "ddr"
       ],
-      "description": "記憶體相關查詢"
+      "description": "記憶體相關查詢",
+      "weight": 1.0
     },
     "storage": {
       "keywords": [
@@ -52,7 +56,8 @@
         "ssd",
         "nvme"
       ],
-      "description": "儲存相關查詢"
+      "description": "儲存相關查詢",
+      "weight": 1.0
     },
     "battery": {
       "keywords": [
@@ -64,7 +69,8 @@
         "電量",
         "电量"
       ],
-      "description": "電池相關查詢"
+      "description": "電池相關查詢",
+      "weight": 1.0
     },
     "portability": {
       "keywords": [
@@ -76,7 +82,8 @@
         "portable",
         "尺寸"
       ],
-      "description": "重量和便攜性相關查詢"
+      "description": "重量和便攜性相關查詢",
+      "weight": 1.0
     },
     "connectivity": {
       "keywords": [
@@ -86,7 +93,8 @@
         "hdmi",
         "lan"
       ],
-      "description": "接口相關查詢"
+      "description": "接口相關查詢",
+      "weight": 1.0
     },
     "comparison": {
       "keywords": [
@@ -98,7 +106,8 @@
         "difference",
         "不同"
       ],
-      "description": "比較相關查詢"
+      "description": "比較相關查詢",
+      "weight": 1.0
     },
     "specifications": {
       "keywords": [
@@ -108,7 +117,8 @@
         "配置",
         "configuration"
       ],
-      "description": "規格查詢"
+      "description": "規格查詢",
+      "weight": 1.0
     },
     "latest": {
       "keywords": [
@@ -123,7 +133,84 @@
         "now",
         "newest"
       ],
-      "description": "最新產品相關查詢"
+      "description": "最新產品相關查詢",
+      "weight": 1.0
+    },
+    "gaming": {
+      "keywords": [
+        "遊戲",
+        "游戏",
+        "gaming",
+        "電競",
+        "电竞",
+        "遊戲用",
+        "游戏用",
+        "玩遊戲",
+        "玩游戏",
+        "game",
+        "fps",
+        "moba",
+        "高畫質",
+        "高画质",
+        "高效能遊戲",
+        "高效能游戏",
+        "遊戲性能",
+        "游戏性能",
+        "適合遊戲",
+        "适合游戏"
+      ],
+      "description": "遊戲相關查詢",
+      "weight": 2.0
+    },
+    "business": {
+      "keywords": [
+        "辦公",
+        "办公",
+        "商務",
+        "商务",
+        "business",
+        "office",
+        "工作",
+        "文書處理",
+        "文书处理",
+        "文書",
+        "文书",
+        "word",
+        "excel",
+        "ppt",
+        "辦公軟體",
+        "办公软件",
+        "商務辦公",
+        "商务办公",
+        "職場",
+        "职场"
+      ],
+      "description": "商務辦公相關查詢",
+      "weight": 1.5
+    },
+    "creation": {
+      "keywords": [
+        "創作",
+        "创作",
+        "設計",
+        "设计",
+        "design",
+        "創意",
+        "创意",
+        "影片編輯",
+        "影片编辑",
+        "video editing",
+        "繪圖",
+        "绘图",
+        "drawing",
+        "3D",
+        "photoshop",
+        "illustrator",
+        "premiere",
+        "after effects"
+      ],
+      "description": "創作設計相關查詢",
+      "weight": 1.8
     }
   }
 }

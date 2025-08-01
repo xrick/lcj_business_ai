@@ -12,7 +12,7 @@ MILVUS_COLLECTION_NAME = "sales_notebook_specs"
 
 # Application settings
 APP_HOST = "0.0.0.0"
-APP_PORT = 8001
+APP_PORT = 8000
 
 # Static files and templates
 STATIC_DIR = BASE_DIR / "static"

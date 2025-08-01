@@ -2618,55 +2618,10 @@ AHP958 - 旗艦級配置，適合高端應用需求
                 
                 response_str = validated_response
                 
-                # 解析LLM回應並生成markdown表格
+                # 改進的LLM回應解析 - 支持多格式和容錯機制
                 try:
-                    # 有效機型名稱列表（與prompt中一致）
-                    valid_model_names = [
-                        'AG958', 'AG958P', 'AG958V', 'APX958', 'AHP958', 'AKK839', 'ARB839',
-                        'AB819-S: FP6', 'AMD819-S: FT6', 'AMD819: FT6', 'APX819: FP7R2', 
-                        'APX839', 'AHP819: FP7R2', 'AHP839', 'ARB819-S: FP7R2'
-                    ]
-                    
-                    # 思考過程關鍵字（用於過濾）
-                    thinking_keywords = [
-                        '我會', '讓我', '首先', '接下來', '然後', '分析', '看看', '考慮', 
-                        '檢查', '搭下來', '從中挑選', '我的任務', '根據提供', '將會', 
-                        '需要分析', '讓我們', '開始分析', '可以看出'
-                    ]
-                    
-                    # 解析回應內容
-                    lines = response_str.strip().split('\n')
-                    recommendations = []
-                    
-                    logging.info(f"LLM 原始回應: {response_str}")
-                    
-                    for line in lines:
-                        line = line.strip()
-                        if not line or '-' not in line:
-                            continue
-                        
-                        # 檢查是否包含思考過程關鍵字
-                        if any(keyword in line for keyword in thinking_keywords):
-                            logging.warning(f"過濾思考過程文字: {line}")
-                            continue
-                        
-                        # 解析機型名稱和推薦原因
-                        parts = line.split('-', 1)
-                        if len(parts) == 2:
-                            model_name = parts[0].strip()
-                            reason = parts[1].strip()
-                            
-                            # 驗證機型名稱是否有效
-                            if model_name in valid_model_names:
-                                recommendations.append({
-                                    "model_name": model_name,
-                                    "reason": reason
-                                })
-                                logging.info(f"有效推薦已添加: {model_name} - {reason}")
-                            else:
-                                logging.warning(f"無效機型名稱被過濾: {model_name}")
-                    
-                    logging.info(f"解析完成，共找到 {len(recommendations)} 個有效推薦")
+                    recommendations = self._parse_llm_response_robust(response_str)
+                    logging.info(f"強化解析完成，共找到 {len(recommendations)} 個有效推薦")
                     
                     # 生成標準 Markdown 表格
                     if recommendations:
@@ -2734,43 +2689,13 @@ AHP958 - 旗艦級配置，適合高端應用需求
                     fallback_recommendations = []
                     preferences_lower = preferences_text.lower()
                     
-                    # 根據關鍵字提供智能推薦
-                    if any(keyword in preferences_lower for keyword in ['文書處理', '文書', '處理', 'office', '辦公軟體', 'word', 'excel', 'ppt', '商務', 'business', '辦公', '輕薄', '攜帶']):
-                        fallback_recommendations = [
-                            ('AKK839', '輕薄商務機型，適合文書處理，長續航力'),
-                            ('ARB839', '專業商務配置，文書處理效率高，穩定可靠'),
-                            ('AB819-S: FP6', '超薄設計，商務辦公首選，適合文書處理')
-                        ]
-                    elif any(keyword in preferences_lower for keyword in ['遊戲', 'gaming', '顯卡', 'gpu', '高效能']):
-                        fallback_recommendations = [
-                            ('AG958P', '高效能遊戲筆電，搭載強勁GPU'),
-                            ('APX958', '頂級遊戲配置，適合專業玩家'),
-                            ('AHP958', '平衡性能與攜帶性的遊戲機型')
-                        ]
-                    elif any(keyword in preferences_lower for keyword in ['性價比', '預算', '經濟', '入門']):
-                        fallback_recommendations = [
-                            ('AMD819: FT6', '高性價比選擇，性能穩定'),
-                            ('AMD819-S: FT6', '經濟實用型，適合日常使用'),
-                            ('APX819: FP7R2', '入門級高效能配置')
-                        ]
-                    else:
-                        # 通用推薦
-                        fallback_recommendations = [
-                            ('AG958', '全方位高效能機型'),
-                            ('AKK839', '商務辦公優選'),
-                            ('AMD819: FT6', '性價比推薦機型')
-                        ]
+                    # 改進的智能推薦策略 - 支持複合需求檢測
+                    fallback_recommendations = self._get_intelligent_fallback_recommendations(
+                        preferences_text, enhanced_query
+                    )
                     
                     # 生成fallback表格
-                    fallback_table_lines = [
-                        "| 推薦機型 | 推薦原因 |",
-                        "| --- | --- |"
-                    ]
-                    
-                    for model, reason in fallback_recommendations:
-                        fallback_table_lines.append(f"| {model} | {reason} |")
-                    
-                    fallback_table = '\n'.join(fallback_table_lines)
+                    fallback_table = self._generate_fallback_table(fallback_recommendations)
                     
                     return {
                         "type": "multichat_complete", 
@@ -2795,3 +2720,332 @@ AHP958 - 旗艦級配置，適合高端應用需求
                 "type": "error",
                 "message": f"處理您的回答時發生錯誤: {str(e)}。請重新填寫問卷或稍後重試。"
             }
+    
+    def _get_intelligent_fallback_recommendations(self, preferences_text: str, enhanced_query: str) -> list:
+        """
+        改進的智能推薦策略 - 支持複合需求檢測
+        """
+        try:
+            preferences_lower = preferences_text.lower()
+            query_lower = enhanced_query.lower()
+            
+            # 使用更新的意圖解析系統分析需求
+            intent_result = self._parse_query_intent(enhanced_query)
+            detected_intents = intent_result.get("intents", {})
+            
+            # 特別處理958系列查詢
+            if "958" in query_lower and "遊戲" in query_lower:
+                return [
+                    ('AG958P', '高效能遊戲筆電，搭載強勁AMD GPU，適合高畫質遊戲'),
+                    ('APX958', '頂級遊戲配置，支援AAA級遊戲，適合專業玩家'),
+                    ('AHP958', '平衡性能與攜帶性的遊戲機型，適合移動遊戲')
+                ]
+            
+            # 複合需求處理
+            recommendations = []
+            
+            # 1. 檢測遊戲需求（優先級最高）
+            gaming_score = detected_intents.get("gaming", 0)
+            if gaming_score > 0 or any(keyword in preferences_lower for keyword in [
+                '遊戲', 'gaming', '游戏', '電競', '电竞', 'game', 'fps', 'moba'
+            ]):
+                recommendations.extend([
+                    ('AG958P', '高效能遊戲筆電，搭載強勁AMD GPU'),
+                    ('APX958', '頂級遊戲配置，適合專業玩家')
+                ])
+            
+            # 2. 檢測商務/辦公需求（精確匹配，避免誤判）
+            business_score = detected_intents.get("business", 0)
+            # 避免將"處理器"誤判為"文書處理"
+            business_keywords = ['文書處理', '文書', '辦公', 'office', 
+                               '辦公軟體', 'word', 'excel', 'ppt', '商務', 'business']
+            # 排除會與硬體相關的關鍵字
+            exclude_keywords = ['處理器', 'cpu', 'processor']
+            
+            has_business_keywords = any(keyword in preferences_lower for keyword in business_keywords)
+            has_exclude_keywords = any(keyword in preferences_lower for keyword in exclude_keywords)
+            
+            if (business_score > 0 or has_business_keywords) and not has_exclude_keywords:
+                recommendations.extend([
+                    ('AKK839', '輕薄商務機型，適合文書處理，長續航力'),
+                    ('ARB839', '專業商務配置，文書處理效率高')
+                ])
+            
+            # 3. 檢測創作需求
+            creation_score = detected_intents.get("creation", 0)
+            if creation_score > 0 or any(keyword in preferences_lower for keyword in [
+                '創作', '创作', '設計', '设计', 'design', '影片編輯', '影片编辑'
+            ]):
+                recommendations.extend([
+                    ('AG958', '高效能創作機型，適合影片編輯和設計'),
+                    ('AHP958', '平衡型創作配置，支援多媒體處理')
+                ])
+            
+            # 4. 檢測性價比需求
+            if any(keyword in preferences_lower for keyword in [
+                '性價比', '預算', '經濟', '入門', '便宜'
+            ]):
+                recommendations.extend([
+                    ('AMD819: FT6', '高性價比選擇，性能穩定'),
+                    ('AMD819-S: FT6', '經濟實用型，適合日常使用')
+                ])
+            
+            # 5. 如果沒有特定需求，提供通用推薦
+            if not recommendations:
+                recommendations = [
+                    ('AG958', '全方位高效能機型，適合多種使用場景'),
+                    ('AKK839', '商務辦公優選，輕薄便攜'),
+                    ('AMD819: FT6', '性價比推薦機型，穩定可靠')
+                ]
+            
+            # 去重並保持順序
+            unique_recommendations = []
+            seen_models = set()
+            for model, reason in recommendations:
+                if model not in seen_models:
+                    unique_recommendations.append((model, reason))
+                    seen_models.add(model)
+            
+            # 限制推薦數量為3個
+            return unique_recommendations[:3]
+            
+        except Exception as e:
+            logging.error(f"生成智能推薦時發生錯誤: {e}")
+            # 如果出錯，返回默認推薦
+            return [
+                ('AG958', '全方位高效能機型'),
+                ('AKK839', '商務辦公優選'),
+                ('AMD819: FT6', '性價比推薦機型')
+            ]
+    
+    def _generate_fallback_table(self, recommendations: list) -> str:
+        """
+        生成fallback推薦表格
+        """
+        try:
+            table_lines = [
+                "| 推薦機型 | 推薦原因 |",
+                "| --- | --- |"
+            ]
+            
+            for model, reason in recommendations:
+                # 清理內容，防止markdown表格錯誤
+                clean_model = str(model).replace('\n', ' ').replace('|', '-')
+                clean_reason = str(reason).replace('\n', ' ').replace('|', '-')
+                table_lines.append(f"| {clean_model} | {clean_reason} |")
+            
+            return '\n'.join(table_lines)
+            
+        except Exception as e:
+            logging.error(f"生成fallback表格時發生錯誤: {e}")
+            return "| 推薦機型 | 推薦原因 |\n| --- | --- |\n| 系統錯誤 | 無法生成推薦 |"
+    
+    def _parse_llm_response_robust(self, response_str: str) -> list:
+        """
+        健壯的LLM回應解析 - 支持多種格式和容錯機制
+        """
+        try:
+            # 有效機型名稱列表（與prompt中一致）
+            valid_model_names = [
+                'AG958', 'AG958P', 'AG958V', 'APX958', 'AHP958', 'AKK839', 'ARB839',
+                'AB819-S: FP6', 'AMD819-S: FT6', 'AMD819: FT6', 'APX819: FP7R2', 
+                'APX839', 'AHP819: FP7R2', 'AHP839', 'ARB819-S: FP7R2'
+            ]
+            
+            logging.info(f"開始健壯解析LLM回應: {response_str[:200]}...")
+            
+            recommendations = []
+            
+            # 策略1: 嘗試多種解析格式
+            parsing_strategies = [
+                self._parse_format_dash_separated,      # 格式: "機型 - 原因"
+                self._parse_format_colon_separated,     # 格式: "機型: 原因"
+                self._parse_format_numbered_list,       # 格式: "1. 機型 - 原因"
+                self._parse_format_bullet_points,       # 格式: "• 機型 - 原因"
+                self._parse_format_model_extraction,    # 從文本中提取機型名稱
+            ]
+            
+            for strategy in parsing_strategies:
+                try:
+                    parsed_recommendations = strategy(response_str, valid_model_names)
+                    if parsed_recommendations:
+                        recommendations.extend(parsed_recommendations)
+                        logging.info(f"解析策略 {strategy.__name__} 找到 {len(parsed_recommendations)} 個推薦")
+                except Exception as e:
+                    logging.warning(f"解析策略 {strategy.__name__} 失敗: {e}")
+                    continue
+            
+            # 去重並保持順序
+            unique_recommendations = []
+            seen_models = set()
+            for rec in recommendations:
+                model_name = rec.get('model_name', '')
+                if model_name and model_name not in seen_models:
+                    unique_recommendations.append(rec)
+                    seen_models.add(model_name)
+            
+            # 限制推薦數量
+            final_recommendations = unique_recommendations[:5]
+            
+            logging.info(f"健壯解析完成，最終推薦數量: {len(final_recommendations)}")
+            
+            return final_recommendations
+            
+        except Exception as e:
+            logging.error(f"健壯解析LLM回應時發生錯誤: {e}")
+            return []
+    
+    def _parse_format_dash_separated(self, text: str, valid_model_names: list) -> list:
+        """解析格式: '機型 - 原因'"""
+        recommendations = []
+        
+        # 思考過程關鍵字（用於過濾）
+        thinking_keywords = [
+            '我會', '讓我', '首先', '接下來', '然後', '分析', '看看', '考慮', 
+            '檢查', '搭下來', '從中挑選', '我的任務', '根據提供', '將會', 
+            '需要分析', '讓我們', '開始分析', '可以看出', '思考', '總結'
+        ]
+        
+        lines = text.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            if not line or '-' not in line:
+                continue
+            
+            # 檢查是否包含思考過程關鍵字
+            if any(keyword in line for keyword in thinking_keywords):
+                continue
+            
+            # 解析機型名稱和推薦原因
+            parts = line.split('-', 1)
+            if len(parts) == 2:
+                model_name = parts[0].strip()
+                reason = parts[1].strip()
+                
+                # 清理可能的數字前綴和特殊字符
+                model_name = self._clean_model_name(model_name)
+                
+                if model_name in valid_model_names:
+                    recommendations.append({
+                        "model_name": model_name,
+                        "reason": reason
+                    })
+        
+        return recommendations
+    
+    def _parse_format_colon_separated(self, text: str, valid_model_names: list) -> list:
+        """解析格式: '機型: 原因'"""
+        recommendations = []
+        
+        lines = text.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            if not line or ':' not in line:
+                continue
+            
+            parts = line.split(':', 1)
+            if len(parts) == 2:
+                model_name = parts[0].strip()
+                reason = parts[1].strip()
+                
+                model_name = self._clean_model_name(model_name)
+                
+                if model_name in valid_model_names:
+                    recommendations.append({
+                        "model_name": model_name,
+                        "reason": reason
+                    })
+        
+        return recommendations
+    
+    def _parse_format_numbered_list(self, text: str, valid_model_names: list) -> list:
+        """解析格式: '1. 機型 - 原因'"""
+        recommendations = []
+        
+        import re
+        # 匹配數字列表格式
+        pattern = r'^\d+\.\s*(.+?)[-:]\s*(.+)$'
+        
+        lines = text.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            match = re.match(pattern, line)
+            if match:
+                model_name = match.group(1).strip()
+                reason = match.group(2).strip()
+                
+                model_name = self._clean_model_name(model_name)
+                
+                if model_name in valid_model_names:
+                    recommendations.append({
+                        "model_name": model_name,
+                        "reason": reason
+                    })
+        
+        return recommendations
+    
+    def _parse_format_bullet_points(self, text: str, valid_model_names: list) -> list:
+        """解析格式: '• 機型 - 原因'"""
+        recommendations = []
+        
+        import re
+        # 匹配項目符號格式
+        pattern = r'^[•·*-]\s*(.+?)[-:]\s*(.+)$'
+        
+        lines = text.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            match = re.match(pattern, line)
+            if match:
+                model_name = match.group(1).strip()
+                reason = match.group(2).strip()
+                
+                model_name = self._clean_model_name(model_name)
+                
+                if model_name in valid_model_names:
+                    recommendations.append({
+                        "model_name": model_name,
+                        "reason": reason
+                    })
+        
+        return recommendations
+    
+    def _parse_format_model_extraction(self, text: str, valid_model_names: list) -> list:
+        """從文本中提取機型名稱（最後的備選方案）"""
+        recommendations = []
+        
+        # 尋找文本中出現的有效機型名稱
+        for model_name in valid_model_names:
+            if model_name in text:
+                # 嘗試提取該機型的描述
+                import re
+                # 找到機型名稱附近的句子作為原因
+                pattern = f'{re.escape(model_name)}[^。！？\\n]*[。！？]?'
+                matches = re.findall(pattern, text)
+                
+                if matches:
+                    reason = matches[0].replace(model_name, '').strip(' -:：。！？')
+                    if not reason:
+                        reason = "根據規格推薦的適合機型"
+                    
+                    recommendations.append({
+                        "model_name": model_name,
+                        "reason": reason
+                    })
+        
+        return recommendations
+    
+    def _clean_model_name(self, model_name: str) -> str:
+        """清理機型名稱，移除數字前綴和特殊字符"""
+        import re
+        
+        # 移除數字前綴 (如 "1. AG958" -> "AG958")
+        model_name = re.sub(r'^\d+\.\s*', '', model_name)
+        
+        # 移除項目符號 (如 "• AG958" -> "AG958")
+        model_name = re.sub(r'^[•·*-]\s*', '', model_name)
+        
+        # 移除多餘的空白和標點
+        model_name = model_name.strip(' .,!?;:：。！？；，')
+        
+        return model_name
