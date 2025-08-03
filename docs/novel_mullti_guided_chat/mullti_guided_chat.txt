@@ -1,0 +1,7 @@
+請幫我設計一套用於LLM-RAG的多輪對話框架 ，其滿足以下功能：
+step1.先設計一個用途的general_prompt用以接收使用者的第一個query:q1.
+step2.將使者把general_prompt與q1結合後，傳送給LLM，並產生LLM輸出out1.
+stet3.再設計一個用於分析step2輸出out1的analyze_prompt1，其目的用於分析使用者的意圖及截取重要關鍵字。
+step4.把analyze_prompt1與out1結合後，送給LLM，進行分析，則會有以下幾種狀況：
+	step4.1.分析出來的使用者意途明顯，且取得的關鍵字對於LLM回覆使用者有幫助。
+	step4.2.分析出來的使用者意途不夠明顯，則LLM需要同時設計一連串的問題，幫助使用者縮小他們的意圖，以利LLM能最終分析出使用者的真正意圖。

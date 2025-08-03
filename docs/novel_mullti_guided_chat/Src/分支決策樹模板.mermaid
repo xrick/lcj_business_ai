@@ -1,0 +1,30 @@
+graph TD
+    Root[用戶查詢分析]
+    
+    Root --> Clear{意圖是否明確?}
+    
+    Clear -->|是| Domain{領域判斷}
+    Clear -->|否| ClarifyType{需要哪種澄清?}
+    
+    Domain -->|技術類| TechRAG[技術知識庫檢索]
+    Domain -->|商業類| BizRAG[商業知識庫檢索]
+    Domain -->|生活類| LifeRAG[生活知識庫檢索]
+    Domain -->|其他| GeneralRAG[通用知識庫檢索]
+    
+    ClarifyType -->|缺少主題| AskTopic[詢問具體主題]
+    ClarifyType -->|缺少範圍| AskScope[詢問範圍界定]
+    ClarifyType -->|缺少目的| AskPurpose[詢問使用目的]
+    ClarifyType -->|多重歧義| MultiChoice[提供選項列表]
+    
+    AskTopic --> CollectInfo[收集補充資訊]
+    AskScope --> CollectInfo
+    AskPurpose --> CollectInfo
+    MultiChoice --> CollectInfo
+    
+    CollectInfo --> ReAnalyze[重新分析意圖]
+    ReAnalyze --> Clear
+    
+    TechRAG --> ResponseGen[生成回應]
+    BizRAG --> ResponseGen
+    LifeRAG --> ResponseGen
+    GeneralRAG --> ResponseGen

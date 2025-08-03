@@ -1,0 +1,34 @@
+graph TB
+    Start([開始]) --> Init[初始化階段]
+    Init --> GenPrompt[載入 General Prompt]
+    GenPrompt --> UserInput[接收用戶輸入 q1]
+    
+    UserInput --> Fusion[融合 general_prompt + q1]
+    Fusion --> LLM1[LLM 生成 out1]
+    
+    LLM1 --> IntentAnalysis[意圖分析模組]
+    IntentAnalysis --> ScoreCalc[計算意圖明確度分數]
+    
+    ScoreCalc --> Decision{分數判斷}
+    
+    Decision -->|>80分| HighConfidence[高置信度路徑]
+    Decision -->|50-80分| Clarification[引導式澄清路徑]
+    Decision -->|<50分| Restart[重新開始]
+    
+    HighConfidence --> RAG[啟動 RAG 檢索]
+    RAG --> KnowledgeBase[(知識庫)]
+    KnowledgeBase --> GenerateResponse[生成精確回應]
+    
+    Clarification --> GuideQuestions[生成引導問題]
+    GuideQuestions --> UserResponse[等待用戶回應]
+    UserResponse --> UpdateContext[更新上下文]
+    UpdateContext --> IntentAnalysis
+    
+    GenerateResponse --> Feedback[收集用戶反饋]
+    Feedback --> Learning[自學習優化]
+    Learning --> UpdateModel[更新模型參數]
+    
+    Restart --> UserInput
+    
+    GenerateResponse --> End([結束/繼續對話])
+    UpdateModel --> End
