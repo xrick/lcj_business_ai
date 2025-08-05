@@ -1040,6 +1040,158 @@ function initSalesAI() {
         }
     }
     
+    // ✨ 渲染漏斗問題的函數
+    function renderFunnelQuestion(container, content) {
+        console.log("🎯 開始渲染漏斗問題", content);
+        
+        if (!content.question || !content.question.options) {
+            console.error("❌ 漏斗問題數據不完整", content);
+            container.innerHTML = `<p style="color: red;">問題數據載入失敗</p>`;
+            return;
+        }
+        
+        const { question, context, session_id } = content;
+        
+        let html = `
+            <div class="funnel-question-container" data-session-id="${session_id}">
+                <div class="funnel-header">
+                    <h3>🤔 需要更多資訊</h3>
+                    <p class="funnel-question-text">${question.question_text}</p>
+                </div>
+                
+                <div class="funnel-options">
+        `;
+        
+        // 渲染選項
+        question.options.forEach((option, index) => {
+            html += `
+                <div class="funnel-option" data-option-id="${option.option_id}">
+                    <div class="option-header">
+                        <span class="option-icon">${option.label.split(' ')[0]}</span>
+                        <h4 class="option-title">${option.label.substring(2)}</h4>
+                    </div>
+                    <p class="option-description">${option.description}</p>
+                    <div class="option-examples">
+                        <strong>例如：</strong>
+                        <ul>
+            `;
+            
+            option.example_queries.forEach(example => {
+                html += `<li>"${example}"</li>`;
+            });
+            
+            html += `
+                        </ul>
+                    </div>
+                    <button class="funnel-option-btn" data-option-id="${option.option_id}">
+                        選擇此選項
+                    </button>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+                
+                <div class="funnel-context">
+                    <p class="context-info">
+                        <strong>您的原始問題：</strong> "${context.original_query}"
+                    </p>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        
+        // 綁定選項點擊事件
+        const optionButtons = container.querySelectorAll('.funnel-option-btn');
+        optionButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const optionId = e.target.dataset.optionId;
+                handleFunnelOptionSelected(optionId, session_id, context.original_query);
+            });
+        });
+        
+        console.log("✅ 漏斗問題渲染完成");
+    }
+    
+    // 處理漏斗選項選擇
+    async function handleFunnelOptionSelected(optionId, sessionId, originalQuery) {
+        console.log(`用戶選擇漏斗選項: ${optionId}, 會話ID: ${sessionId}`);
+        
+        // 顯示載入狀態
+        const funnelContainer = document.querySelector(`[data-session-id="${sessionId}"]`);
+        if (funnelContainer) {
+            funnelContainer.innerHTML = `
+                <div class="loading-message">
+                    <div class="loading-spinner"></div>
+                    <p>正在處理您的選擇...</p>
+                </div>
+            `;
+        }
+        
+        try {
+            const response = await fetch("/api/sales/chat-stream", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    query: originalQuery,
+                    funnel_choice: optionId,
+                    session_id: sessionId,
+                    service_name: "sales_assistant" 
+                }),
+            });
+
+            if (!response.ok) throw new Error(`HTTP 錯誤！ 狀態: ${response.status}`);
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullResponseText = "";
+            let assistantMessageContainer = createMessageContainer('assistant');
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                fullResponseText += chunk;
+
+                const lines = fullResponseText.split('\n\n');
+                
+                for (let i = 0; i < lines.length - 1; i++) {
+                    const line = lines[i];
+                    if (line.startsWith('data: ')) {
+                        const jsonDataString = line.substring(6);
+                        if (jsonDataString) {
+                            try {
+                                const jsonData = JSON.parse(jsonDataString);
+                                renderMessageContent(assistantMessageContainer.querySelector('.message-content'), jsonData);
+                            } catch (e) {
+                                console.error("JSON 解析錯誤:", e);
+                            }
+                        }
+                    }
+                }
+                fullResponseText = lines[lines.length - 1];
+            }
+            
+            // 移除載入狀態的容器
+            if (funnelContainer && document.body.contains(funnelContainer)) {
+                funnelContainer.remove();
+            }
+            
+        } catch (error) {
+            console.error("漏斗選項處理錯誤:", error);
+            if (funnelContainer) {
+                funnelContainer.innerHTML = `
+                    <div class="error-message" style="color: red;">
+                        <p>處理選項時發生錯誤: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+    }
+
     // ✨✨✨ 全新的、更強健的渲染函數 ✨✨✨
     function renderMessageContent(container, content) {
         console.log("renderMessageContent 被調用，content:", content);
@@ -1054,6 +1206,13 @@ function initSalesAI() {
         }
         if (content.error) {
             container.innerHTML = `<p style="color: red;"><strong>錯誤：</strong> ${content.error}</p>`;
+            return;
+        }
+
+        // ✨ 新增：處理漏斗問題格式
+        if (content.type === 'funnel_question') {
+            console.log("🔥 檢測到 funnel_question，渲染選項", content);
+            renderFunnelQuestion(container, content);
             return;
         }
 
