@@ -1051,6 +1051,97 @@ class SalesAssistantService(BaseService):
             logging.error(f"获取数据时发生错误: {e}")
             raise
 
+    async def _handle_funnel_choice(self, query: str, funnel_choice: str, session_id: str):
+        """
+        處理漏斗選擇的邏輯
+        """
+        logging.info(f"處理漏斗選擇: {funnel_choice}")
+        
+        if funnel_choice == "series_comparison":
+            # 系列規格比較流程
+            logging.info("用戶選擇系列規格比較流程")
+            
+            # 重新分類查詢以進行系列比較
+            async for response in self._process_series_comparison(query):
+                yield response
+                
+        elif funnel_choice == "purpose_recommendation":
+            # 用途導向推薦流程
+            logging.info("用戶選擇用途導向推薦流程")
+            
+            # 啟動多輪對話問卷
+            multichat_response = {
+                "type": "multichat_start",
+                "message": "我將通過幾個問題來了解您的需求，為您推薦最適合的筆電。",
+                "session_id": session_id or "generated_session_id"
+            }
+            yield f"data: {json.dumps(multichat_response, ensure_ascii=False)}\n\n"
+            
+        else:
+            # 未知選擇，返回錯誤
+            error_response = {
+                "type": "error",
+                "message": f"未知的漏斗選擇: {funnel_choice}"
+            }
+            yield f"data: {json.dumps(error_response, ensure_ascii=False)}\n\n"
+
+    async def _process_series_comparison(self, query: str):
+        """
+        處理系列比較的邏輯
+        """
+        logging.info(f"開始系列比較流程，查詢: {query}")
+        
+        # 使用現有的 RAG 流程進行系列比較
+        # 步驟1：解析查詢意圖
+        query_intent = self._parse_query_intent(query)
+        logging.info(f"系列比較查詢意圖解析結果: {query_intent}")
+        
+        # 步驟2：根據查詢類型獲取精確資料
+        try:
+            context_list_of_dicts, target_modelnames = self._get_data_by_query_type(query_intent)
+            logging.info(f"獲取到的上下文資料數量: {len(context_list_of_dicts)}")
+            logging.info(f"目標型號: {target_modelnames}")
+            
+            if not context_list_of_dicts:
+                # 沒有找到相關資料
+                no_data_response = {
+                    "answer_summary": "很抱歉，沒有找到相關的筆電規格資料。請檢查您的查詢是否包含有效的型號或系列名稱。",
+                    "comparison_table": []
+                }
+                yield f"data: {json.dumps(no_data_response, ensure_ascii=False)}\n\n"
+                return
+            
+            # 步驟3：構建提示詞並使用LLM生成回應
+            context_str = "\n".join([f"型號: {item['modelname']}\n規格: {json.dumps(item, ensure_ascii=False, indent=2)}" for item in context_list_of_dicts])
+            
+            # 構建意圖信息
+            intent_info = f"""查詢類型: {query_intent['query_type']}
+目標型號: {target_modelnames}
+"""
+            
+            # 構建最終提示詞
+            final_prompt = self.prompt_template.replace("{context}", context_str).replace("{query}", query)
+            final_prompt = final_prompt.replace("[QUERY INTENT ANALYSIS]", intent_info)
+            
+            logging.info("開始調用LLM生成回應")
+            
+            llm_response = self.llm.invoke(final_prompt)
+            logging.info("LLM回應生成完成")
+            
+            # 步驟4：解析並格式化LLM回應
+            structured_response = self._parse_llm_response(llm_response.content)
+            logging.info("LLM回應解析完成")
+            
+            yield f"data: {json.dumps(structured_response, ensure_ascii=False)}\n\n"
+            
+        except Exception as e:
+            logging.error(f"系列比較處理過程中發生錯誤: {e}", exc_info=True)
+            error_response = {
+                "answer_summary": f"處理系列比較時發生錯誤: {str(e)}",
+                "comparison_table": []
+            }
+            yield f"data: {json.dumps(error_response, ensure_ascii=False)}\n\n"
+
     def _should_list_all_models(self, query: str) -> bool:
         """
         檢查是否應該列出所有型號和系列
@@ -1082,6 +1173,17 @@ class SalesAssistantService(BaseService):
         """
         try:
             logging.info(f"開始新的RAG流程，查詢: {query}")
+            
+            # 提取額外參數
+            funnel_choice = kwargs.get("funnel_choice")
+            session_id = kwargs.get("session_id")
+            
+            # 步驟0a：處理漏斗選擇
+            if funnel_choice:
+                logging.info(f"檢測到漏斗選擇: {funnel_choice}, 會話ID: {session_id}")
+                async for response in self._handle_funnel_choice(query, funnel_choice, session_id):
+                    yield response
+                return
             
             # 步驟0：檢查是否應該列出所有型號和系列
             if self._should_list_all_models(query):
